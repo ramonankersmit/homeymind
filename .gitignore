@@ -1,0 +1,25 @@
+# Virtuele omgeving
+homey-ai/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Configuratie en geheimen
+config.yaml
+memory.json
+
+# Logboeken
+logs/
+
+# Modelbestanden en downloads
+models/
+*.zip
+*.bin
+
+# Tijdelijke bestanden
+*.wav
+*.mp3
+input.wav
+output.wav

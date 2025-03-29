@@ -1,0 +1,19 @@
+openai_api_key: "VUL_HIER_JE_OPENAI_API_KEY_IN"
+groq_api_key: "VUL_HIER_JE_GROQ_API_KEY_IN"
+
+llm:
+  provider: local            # opties: local, openai, groq
+  local_model: mistral
+  cloud_model: gpt-4o
+  groq_model: llama3-8b-8192
+  prompt_path: prompts/system_prompt.txt
+
+audio:
+  wake_word: topper
+  record_seconds: 5
+  language: nl
+
+mqtt:
+  topic_prefix: ai/
+  host: localhost
+  port: 1883

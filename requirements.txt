@@ -1,0 +1,6 @@
+openai
+requests
+sounddevice
+vosk
+paho-mqtt
+PyYAML
