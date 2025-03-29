@@ -53,7 +53,7 @@ rename "models\vosk-model-nl-0.22" "models\vosk-model-nl"
 
 Zorg dat het pad daarna is:
 ```
-C:\Projects\HomeyMind\models\vosk-model-nl
+<project_path>\HomeyMind\models\vosk-model-nl
 ```
 
 ---
@@ -84,7 +84,28 @@ Meer modellen: https://ollama.com/library
 
 De AI-agent gebruikt MQTT om met Homey te communiceren.
 
-#### 🔘 Optie A – Homey als MQTT client:
+
+
+#### ✅ Aanbevolen: Homey als MQTT Broker
+
+Gebruik de [MQTT Broker app](https://homey.app/nl-nl/app/nl.scanno.mqttbroker/MQTT-Broker/) op je Homey Pro:
+
+1. Installeer de app op je Homey
+2. Start de broker via de app
+3. De broker luistert standaard op poort `1883`
+4. Vul in je `config.yaml` het IP van Homey in:
+
+```yaml
+mqtt:
+  host: 192.168.1.150  # Vervang dit door het IP van jouw Homey
+  port: 1883
+  topic_prefix: ai/
+```
+
+Zo praat je AI-agent direct met Homey zonder extra apps.
+
+
+#### 🔘 Alternatief – Homey als MQTT client:
 1. Installeer in Homey de MQTT Client app
 2. Stel je MQTT broker IP/poort in (bijv. `192.168.1.150:1883`)
 3. Voeg een flow toe die luistert op topic `ai/#`
@@ -137,9 +158,10 @@ Zeg "Hey Topper", geef een opdracht en laat de AI je helpen met je huis.
 - [x] OpenAI & Groq ondersteuning
 - [ ] GUI (Open WebUI integratie)
 - [ ] CrewAI agent swarm
+- [ ] Intent recognition Agent
 - [ ] Memory en logboek
 - [ ] Suggesties & zelfbedachte acties
 
 ---
 
-## 🧠 Gemaakt door Ramon & GPT – voor een slimmer huis.
+## 🧠 Ontwikkeld voor slimme huisautomatisering met lokale intelligentie en maximale controle.
