@@ -1,96 +1,106 @@
-# 🧠 HomeyMind - Slimme Spraakgestuurde AI voor je Smart Home
 
-HomeyMind is een spraakgestuurde AI-agent gebouwd in Python.  
-Hij werkt volledig offline (via Ollama) of met cloudmodellen zoals OpenAI en Groq, en stuurt je slimme huis aan via MQTT.
+# HomeyMind
 
----
-
-## 🚀 Features
-
-- 🎙️ Wake word detectie ("Hey Topper") via Vosk
-- 🗣️ Realtime spraakherkenning
-- 🧠 LLM via OpenAI, Groq of lokaal via Ollama
-- 💡 MQTT-aansturing van apparaten
-- 📢 Tekst-naar-spraak via Sonos of TTS-kanaal
-- 💾 Geheugen: onthoudt o.a. de laatst gekozen LLM-modus
-- 🪵 Logging naar `logs/topper.log`
-- 🧪 Klaar voor uitbreiding naar agent-swarms
+Jouw eigen spraakgestuurde AI-assistent voor Homey Pro, volledig lokaal of hybride (OpenAI, Groq). Zeg "Hey Topper" en automatiseer alles in huis. 🎤🏡🤖
 
 ---
 
-## 🛠️ Installatie
+## 🚀 Installatie
 
-### 📦 Stap 1: Voorbereiding
+1. Clone de repository:
 
 ```bash
-git clone https://github.com/jouw-gebruiker/homeymind.git
+git clone https://github.com/ramonankersmit/homeymind.git
 cd homeymind
 ```
 
-### 🐍 Stap 2: Virtuele omgeving
+2. Maak een virtuele omgeving:
 
 ```bash
 python -m venv homeymind
-homeymind\Scripts\activate  # Windows
+homeymind\Scripts\activate
 ```
 
-### 📚 Stap 3: Dependencies installeren
+3. Installeer afhankelijkheden:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### ⚙️ Stap 4: Configuratie
+4. Kopieer het voorbeeldconfiguratiebestand:
 
-1. Maak een kopie van het voorbeeldbestand:
 ```bash
 copy config.example.yaml config.yaml
 ```
 
-2. Vul daarin:
-   - je OpenAI- of Groq API-sleutel (optioneel)
-   - welk LLM je standaard wilt gebruiken
-   - MQTT-gegevens
+5. Vul je `config.yaml` aan met:
+   - je OpenAI of Groq sleutel
+   - MQTT host (bijv. Homey IP)
+   - modelvoorkeur (`local`, `openai`, `groq`)
 
 ---
 
-## ▶️ Starten
+## 🛠️ Extra installatie na het clonen
 
-Zorg dat je MQTT-broker draait (zoals Mosquitto), en start de agent:
+### 📦 1. Vosk spraakmodel installeren
+
+```bash
+mkdir models
+curl -L -o vosk-model-nl.zip https://alphacephei.com/vosk/models/vosk-model-nl-0.22.zip
+tar -xf vosk-model-nl.zip -C models
+rename "models\vosk-model-nl-0.22" "models\vosk-model-nl"
+```
+
+Zorg dat het pad daarna is:
+```
+C:\Projects\HomeyMind\models\vosk-model-nl
+```
+
+---
+
+### 🤖 2. Ollama lokaal model installeren
+
+Als je lokaal een LLM wilt draaien:
+
+```bash
+ollama run mistral
+```
+
+Zorg ervoor dat dit overeenkomt met je `config.yaml`:
+
+```yaml
+llm:
+  provider: local
+  local_model: mistral
+```
+
+Meer modellen: https://ollama.com/library
+
+---
+
+## 🧪 Starten
 
 ```bash
 python main.py
 ```
 
----
-
-## 🎙️ Spraakcommando's
-
-- `"Gebruik lokale AI"` → schakelt naar Ollama
-- `"Gebruik cloud OpenAI"` → schakelt naar OpenAI
-- `"Gebruik cloud Groq"` → schakelt naar Groq
-- `"Zet woonkamerlamp aan"` → herkent intentie en stuurt MQTT-actie
+Zeg "Hey Topper", geef een opdracht en laat de AI je helpen met je huis.
 
 ---
 
-## 💡 Tip
+## 💡 Roadmap
 
-Gebruik `.gitignore` om `config.yaml`, `logs/`, `memory.json`, en de virtuele omgeving uit te sluiten van GitHub.
-
----
-
-## 📅 Roadmap
-
-- [x] Wake word + spraakherkenning
-- [x] MQTT-aansturing
-- [x] LLM-schakelaar + geheugen
-- [x] Meerdere cloudproviders + fallback
-- [ ] GUI-interface (bijv. via Open WebUI)
-- [ ] Agent swarm integratie (CrewAI + MCP)
-- [ ] Tijdsafhankelijke routines
+- [x] Wake word met Vosk
+- [x] Streaming transcriptie (Whisper)
+- [x] MQTT-interactie met Homey
+- [x] TTS voor Sonos
+- [x] Wisselen tussen lokale/cloud LLM's
+- [x] OpenAI & Groq ondersteuning
+- [ ] GUI (Open WebUI integratie)
+- [ ] CrewAI agent swarm
+- [ ] Memory en logboek
+- [ ] Suggesties & zelfbedachte acties
 
 ---
 
-## 👨‍💻 Ontwikkeld door
-
-Een enthousiaste AI-hacker met een slimme woning 😄
+## 🧠 Gemaakt door Ramon & GPT – voor een slimmer huis.
