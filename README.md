@@ -76,7 +76,46 @@ llm:
 
 Meer modellen: https://ollama.com/library
 
+
+
 ---
+
+### 📡 3. MQTT instellen (vereist)
+
+De AI-agent gebruikt MQTT om met Homey te communiceren.
+
+#### 🔘 Optie A – Homey als MQTT client:
+1. Installeer in Homey de MQTT Client app
+2. Stel je MQTT broker IP/poort in (bijv. `192.168.1.150:1883`)
+3. Voeg een flow toe die luistert op topic `ai/#`
+
+#### 🔘 Optie B – Lokale MQTT broker installeren (optioneel):
+
+Installeer Mosquitto (Windows):
+
+```bash
+winget install mosquitto
+```
+
+Start de broker met:
+
+```bash
+mosquitto -v
+```
+
+#### ⚙️ config.yaml
+
+Zorg dat je brokerinstellingen kloppen:
+
+```yaml
+mqtt:
+  host: localhost
+  port: 1883
+  topic_prefix: ai/
+```
+
+---
+
 
 ## 🧪 Starten
 
