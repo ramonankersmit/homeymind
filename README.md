@@ -145,6 +145,28 @@ python main.py
 ```
 
 Zeg "Hey Topper", geef een opdracht en laat de AI je helpen met je huis.
+---
+
+## 💻 Webinterface (optioneel)
+
+De `ui/`-map bevat een optionele lokale gebruikersinterface gebouwd met Vite + React.
+
+### Voorwaarden
+- Node.js en npm moeten geïnstalleerd zijn (https://nodejs.org)
+
+### Installatie en starten
+
+```bash
+cd ui
+npm install
+npm install -D @vitejs/plugin-react  # indien nodig
+npm run dev
+```
+
+Bezoek daarna: [http://localhost:5173](http://localhost:5173)
+
+📝 Deze UI is optioneel en beïnvloedt het functioneren van de spraakagent niet.
+
 
 ---
 
