@@ -3,7 +3,7 @@ import json
 import os
 
 # Vul hier je Homey Personal Access Token in:
-TOKEN = "pat-apps-673a50ceeb3359a031fbd1741743118227070-qjgihdps58"
+TOKEN = "XXX"
 
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
