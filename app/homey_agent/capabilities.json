@@ -1,0 +1,29 @@
+{
+  "licht": {
+    "onoff": {
+      "settable": true,
+      "payloads": {
+        "aanzetten": "on",
+        "uitzetten": "off"
+      }
+    },
+    "dim": {
+      "settable": true,
+      "payloads": {}
+    }
+  },
+  "gordijn": {
+    "windowcoverings_state": {
+      "settable": true,
+      "payloads": {
+        "openen": "open",
+        "dichtdoen": "close"
+      }
+    }
+  },
+  "sensor": {
+    "measure-temperature": {
+      "settable": false
+    }
+  }
+}
