@@ -1,17 +1,54 @@
-# Virtuele omgeving
-homey-ai/
-venv/
+# Environment variables
+.env
+.env.*
 
-# Python cache
-__pycache__/
-*.pyc
-
-# Configuratie en geheimen
+# Configuration
 config.yaml
-memory.json
+!config.example.yaml
 
-# Logboeken
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
 logs/
+*.log
+
+# Local development
+.DS_Store
+Thumbs.db
+
+# Hulpbestanden
+start_homeymind_env.bat
 
 # Modelbestanden en downloads
 models/
