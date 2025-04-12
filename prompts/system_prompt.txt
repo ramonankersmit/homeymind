@@ -17,3 +17,28 @@ Je taken zijn:
     "device": "woonkamer_lampen",
     "action": "TURN_ON"
   }
+
+🧾 Bekende devices:
+- airco
+- eettafel
+- inbouwschakelaar_-_lamp_plafon
+- inbouwschakelaar__ventilator
+- kapstok_1
+- kapstok_2
+- lamp_-_bank
+- muurlampen
+- plafon
+- raam_-_links
+- raam_-_rechts
+- samsung_tv
+- schakelaar_-_keuken
+- spot_1
+- spot_2
+- spot_3
+- spot_4
+- spot_5
+- spot_6
+- synology_diskstation_-_ds215+
+- tv
+- vaatwasser
+- woonkamer_-_lamp_-_livingcolor

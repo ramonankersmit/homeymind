@@ -1,5 +1,5 @@
 @echo off
-cd /d C:\Projects\homey-ai
-call homey-ai\Scripts\activate
+cd /d %~dp0
+call homeymind\Scripts\activate.bat
 python main.py
 pause

@@ -1,19 +1,25 @@
-openai_api_key: "VUL_HIER_JE_OPENAI_API_KEY_IN"
-groq_api_key: "VUL_HIER_JE_GROQ_API_KEY_IN"
+openai_api_key: "${OPENAI_API_KEY}"  # Set in .env file
+groq_api_key: "${GROQ_API_KEY}"    # Set in .env file
+
+homey:
+  token: "${HOMEY_TOKEN}"          # Set in .env file
+  host: "192.168.1.x"             # Your Homey's IP address
 
 llm:
-  provider: local            # opties: local, openai, groq
-  local_model: mistral
-  cloud_model: gpt-4o
-  groq_model: llama3-8b-8192
   prompt_path: prompts/system_prompt.txt
+  provider: local                  # Options: local, openai, groq
+  local_model: mistral            # Local model to use
+  cloud_model: gpt-4o             # OpenAI model to use
+  groq_model: llama3-8b-8192      # Groq model to use
 
 audio:
-  wake_word: topper
-  record_seconds: 5
-  language: nl
+  wake_word: topper               # Wake word to trigger the assistant
+  record_seconds: 5               # How long to record after wake word
+  language: nl                    # Language for speech recognition
 
 mqtt:
-  topic_prefix: ai/
-  host: localhost
-  port: 1883
+  topic_prefix: ai/               # Prefix for MQTT topics
+  host: "192.168.1.x"            # Same as homey.host
+  port: 1883                      # Default MQTT port
+  username: "${MQTT_USERNAME}"    # Set in .env file
+  password: "${MQTT_PASSWORD}"    # Set in .env file
