@@ -206,12 +206,19 @@ Note: This UI is optional and doesn't affect the voice agent's functionality.
 
 ```
 HomeyMind/
-├── app/                    # Application modules
-├── audio/                  # Audio processing
-├── homey/                  # Homey integration
-├── prompts/               # AI prompts
-├── tools/                 # Utility scripts
-├── utils/                 # Helper functions
+├── audio/                  # Audio processing (wake word, recording, transcription)
+├── homey/                  # Homey integration (MQTT client)
+├── llm/                    # LLM integration (local and cloud models)
+├── models/                 # Speech recognition models
+├── prompts/               # AI prompts for intent recognition
+├── tests/                 # Test utilities
+│   ├── test_mic.py        # Microphone testing
+│   └── test_mqtt.py       # MQTT testing
+├── utils/                 # Helper functions and utilities
+│   ├── capability_manager.py  # Device capability management
+│   ├── device_list.py        # Device discovery and management
+│   ├── device_types.yaml     # Device type definitions
+│   └── intent_parser.py      # Intent recognition
 ├── config.yaml           # Configuration file
 ├── main.py               # Main application
 └── requirements.txt      # Python dependencies
@@ -229,11 +236,13 @@ HomeyMind/
 - [x] TTS for Sonos
 - [x] Switching between local/cloud LLMs
 - [x] OpenAI & Groq support
-- [ ] GUI (Open WebUI integration)
+- [x] Memory and logging
+- [x] Intent recognition
+- [ ] Improve intent recognition accuracy
 - [ ] CrewAI agent swarm
-- [ ] Intent recognition Agent
-- [ ] Memory and logging
 - [ ] Suggestions & autonomous actions
+- [ ] Better error handling and recovery
+- [ ] Unit tests and CI/CD
 
 ## License
 
