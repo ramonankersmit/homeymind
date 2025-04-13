@@ -1,0 +1,40 @@
+device_types:
+  licht:
+    keywords: ["lamp", "licht", "spot"]
+    capabilities:
+      onoff:
+        settable: true
+        payloads:
+          aanzetten: "on"
+          uitzetten: "off"
+          aan: "on"
+          uit: "off"
+      dim:
+        settable: true
+        payloads:
+          helderder: "up"
+          donkerder: "down"
+          helderheid: "set"
+
+  gordijn:
+    keywords: ["gordijn", "raam"]
+    capabilities:
+      windowcoverings_state:
+        settable: true
+        payloads:
+          openen: "open"
+          dichtdoen: "close"
+          open: "open"
+          dicht: "close"
+
+  airco:
+    keywords: ["airco"]
+    capabilities:
+      thermostat_mode:
+        settable: true
+        payloads:
+          aanzetten: "heat"
+          uitzetten: "off"
+          koelen: "cool"
+          aan: "heat"
+          uit: "off" 

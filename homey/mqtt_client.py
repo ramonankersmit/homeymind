@@ -30,7 +30,15 @@ class MQTTClient:
             print("[MQTT] Connected to broker")
             self.connected = True
         else:
-            print(f"[MQTT] Connection failed with code {rc}")
+            error_messages = {
+                1: "Connection refused - incorrect protocol version",
+                2: "Connection refused - invalid client identifier",
+                3: "Connection refused - server unavailable",
+                4: "Connection refused - bad username or password",
+                5: "Connection refused - not authorized"
+            }
+            error_msg = error_messages.get(rc, f"Unknown error code {rc}")
+            print(f"[MQTT] Connection failed: {error_msg}")
             self.connected = False
 
     def _on_disconnect(self, client, userdata, rc):
@@ -46,6 +54,7 @@ class MQTTClient:
         """Connect to the MQTT broker."""
         if not self.connected:
             try:
+                print(f"[MQTT] Attempting to connect to {self.config['mqtt']['host']}:{self.config['mqtt']['port']} with username '{self.config['mqtt']['username']}'")
                 self.client.connect(
                     self.config["mqtt"]["host"],
                     self.config["mqtt"]["port"],
@@ -71,35 +80,38 @@ class MQTTClient:
             except Exception as e:
                 print(f"[MQTT Error] Disconnection failed: {str(e)}")
 
-    def publish_action(self, intent: Intent):
+    def publish_action(self, intent: Intent) -> bool:
         """Publish an action to the MQTT broker."""
         if not self.connected:
-            self.connect()
-            if not self.connected:
-                return False
-
-        try:
-            topic = f"{self.config['mqtt']['topic_prefix']}{intent.device}"
-            
-            # Handle different action types
-            if intent.action_type == ActionType.ONOFF:
-                message = "ON" if intent.value else "OFF"
-            elif intent.action_type == ActionType.DIM:
-                # Convert dim value to percentage (0-100)
-                dim_value = int(intent.value * 100) if intent.value is not None else 0
-                message = str(dim_value)
-            elif intent.action_type == ActionType.SWITCH_MODE:
-                message = intent.action.upper()
-            else:
-                print(f"[MQTT] Unknown action type: {intent.action_type}")
-                return False
-
-            print(f"[MQTT] {topic} = {message}")
-            self.client.publish(topic, message)
-            return True
-        except Exception as e:
-            print(f"[MQTT Error] {str(e)}")
+            print("[ERROR] Niet verbonden met MQTT broker")
             return False
+            
+        topic = f"{self.config['mqtt']['topic_prefix']}action"
+        
+        # Build payload based on action type
+        payload = {
+            "device": intent.device,
+            "action": intent.action
+        }
+        
+        # Add capability-specific parameters
+        if intent.action_type == ActionType.DIM:
+            payload["capability"] = "dim"
+            payload["value"] = intent.parameters.get("direction", "up")
+        elif intent.action_type == ActionType.WINDOWCOVERINGS:
+            payload["capability"] = "windowcoverings_state"
+            payload["value"] = intent.parameters.get("state", "open")
+        elif intent.action_type == ActionType.THERMOSTAT:
+            payload["capability"] = "thermostat_mode"
+            payload["value"] = intent.parameters.get("mode", "heat")
+        else:  # ONOFF or UNKNOWN
+            payload["capability"] = "onoff"
+            payload["value"] = intent.parameters.get("state", "on")
+            
+        if intent.value is not None:
+            payload["value"] = intent.value
+            
+        return self._publish_message(topic, json.dumps(payload))
 
     def publish_tts(self, message: str):
         """Publish a TTS message."""

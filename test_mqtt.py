@@ -19,12 +19,14 @@ def load_config():
     return config
 
 def on_connect(client, userdata, flags, rc):
+    print(f"Connected with result code {rc}")
     if rc == 0:
-        print("✅ Connected to MQTT broker")
-    elif rc == 5:
-        print("❌ Connection refused - bad username or password")
+        print("Successfully connected to MQTT broker!")
     else:
-        print(f"❌ Connection failed with code {rc}")
+        print("Failed to connect to MQTT broker")
+
+def on_disconnect(client, userdata, rc):
+    print("Disconnected from MQTT broker")
 
 def on_message(client, userdata, msg):
     print(f"📨 Received message on {msg.topic}: {msg.payload.decode()}")
@@ -39,14 +41,18 @@ def main():
     print(f"Using credentials - Username: {username}, Password: [REDACTED]")
     
     client = mqtt.Client()
+    client.username_pw_set(username, password)
     client.on_connect = on_connect
+    client.on_disconnect = on_disconnect
     client.on_message = on_message
     
-    client.username_pw_set(username, password)
-    
     try:
+        print("Connecting to MQTT broker...")
         client.connect(host, port, 60)
         client.loop_start()
+        
+        # Wait for connection
+        time.sleep(5)
         
         # Subscribe to test topic
         client.subscribe("test/#")

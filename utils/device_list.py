@@ -1,3 +1,11 @@
+"""
+Device List Management module for HomeyMind.
+
+This module handles the discovery and management of Homey devices through MQTT.
+It maintains a cache of known devices and provides functionality to update the list
+from the MQTT broker.
+"""
+
 import os
 import json
 from typing import List, Dict
@@ -7,7 +15,12 @@ from collections import defaultdict
 DEVICE_CACHE_FILE = "cache/devices.json"
 
 def load_devices_from_cache() -> List[str]:
-    """Load devices from cache file if it exists."""
+    """
+    Load devices from cache file if it exists.
+    
+    Returns:
+        List[str]: List of device names loaded from cache, or empty list if cache doesn't exist
+    """
     if os.path.exists(DEVICE_CACHE_FILE):
         try:
             with open(DEVICE_CACHE_FILE, "r") as f:
@@ -18,13 +31,33 @@ def load_devices_from_cache() -> List[str]:
     return []
 
 def save_devices_to_cache(devices: List[str]):
-    """Save devices to cache file."""
+    """
+    Save devices to cache file.
+    
+    Args:
+        devices (List[str]): List of device names to save
+    """
     os.makedirs(os.path.dirname(DEVICE_CACHE_FILE), exist_ok=True)
     with open(DEVICE_CACHE_FILE, "w") as f:
         json.dump({"devices": devices}, f)
 
 def get_devices_from_mqtt(config: Dict) -> List[str]:
-    """Get devices from MQTT broker."""
+    """
+    Get devices from MQTT broker.
+    
+    Args:
+        config (Dict): Configuration dictionary containing MQTT settings
+        
+    Returns:
+        List[str]: List of discovered device names
+        
+    This function:
+    1. Connects to the MQTT broker
+    2. Subscribes to device topics
+    3. Collects device information
+    4. Filters for devices with onoff or dim capabilities
+    5. Saves the list to cache
+    """
     import paho.mqtt.client as mqtt
     from time import sleep
     
@@ -35,7 +68,7 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
     def on_connect(client, userdata, flags, rc):
         nonlocal ready
         if rc == 0:
-            print("✅ Connected to MQTT broker")
+            print("[OK] Connected to MQTT broker")
             client.subscribe("homey/devices/+/name")  # Get device names
             client.subscribe("homey/devices/+/capabilities/+/name")  # Get capability names
             client.subscribe("homey/devices/+/capabilities/+/value")  # Get capability values
@@ -69,7 +102,7 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
                         payload = msg.payload.decode()
                         devices[device_id][capability]["value"] = payload
         except Exception as e:
-            print(f"❌ Error processing message: {e}")
+            print(f"[ERROR] Error processing message: {e}")
 
     client = mqtt.Client()
     client.username_pw_set(config["mqtt"]["username"], config["mqtt"]["password"])
@@ -87,7 +120,7 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
             timeout -= 1
             
         if not ready:
-            print("❌ Timeout waiting for MQTT connection")
+            print("[ERROR] Timeout waiting for MQTT connection")
             return []
             
         # Wait for device messages
@@ -112,14 +145,22 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
         save_devices_to_cache(device_list)
         return sorted(device_list)
     except Exception as e:
-        print(f"❌ Error connecting to MQTT: {e}")
+        print(f"[ERROR] Error connecting to MQTT: {e}")
         return []
 
 # Load devices from cache initially
 KNOWN_DEVICES = load_devices_from_cache()
 
 def update_device_list(config: Dict) -> List[str]:
-    """Update the device list from MQTT and return the new list."""
+    """
+    Update the device list from MQTT and return the new list.
+    
+    Args:
+        config (Dict): Configuration dictionary containing MQTT settings
+        
+    Returns:
+        List[str]: Updated list of device names
+    """
     global KNOWN_DEVICES
     KNOWN_DEVICES = get_devices_from_mqtt(config)
     return KNOWN_DEVICES
