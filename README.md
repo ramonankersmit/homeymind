@@ -27,10 +27,15 @@ git clone https://github.com/yourusername/HomeyMind.git
 cd HomeyMind
 ```
 
-2. Create a virtual environment:
+2. Create and activate a virtual environment:
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# On Windows:
+python -m venv homeymind
+.\homeymind\Scripts\activate
+
+# On Linux/Mac:
+python -m venv homeymind
+source homeymind/bin/activate
 ```
 
 3. Install dependencies:
@@ -48,13 +53,13 @@ cp config.example.yaml config.yaml
 cp .env.example .env
 ```
 
-6. Edit `.env` with your actual credentials:
-```
-OPENAI_API_KEY=your_openai_api_key
-GROQ_API_KEY=your_groq_api_key
-HOMEY_TOKEN=your_homey_token
-MQTT_USERNAME=your_mqtt_username
-MQTT_PASSWORD=your_mqtt_password
+6. Run the application:
+```bash
+# On Windows:
+.\run.bat
+
+# On Linux/Mac:
+python main.py
 ```
 
 7. Edit `config.yaml` with your settings:
