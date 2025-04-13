@@ -232,17 +232,17 @@ HomeyMind/
 
 ```mermaid
 flowchart TD
-  mic[Microphone]
-  wake[Wake Word (Vosk)]
-  recorder[Audio Recorder]
-  transcriber[Transcriber (Whisper/Vosk)]
-  autogen[AutoGenManager]
-  mqtt[MQTTClient → Homey]
+  mic["Microphone"]
+  wake["Wake Word (Vosk)"]
+  recorder["Audio Recorder"]
+  transcriber["Transcriber (Whisper/Vosk)"]
+  autogen["AutoGenManager"]
+  mqtt["MQTTClient → Homey"]
 
   subgraph AutoGen_Agents
-    intent[IntentParser]
-    assistant[HomeyAssistant]
-    controller[DeviceController]
+    intent["IntentParser"]
+    assistant["HomeyAssistant"]
+    controller["DeviceController"]
   end
 
   mic --> wake
@@ -253,6 +253,7 @@ flowchart TD
   autogen --> assistant
   autogen --> controller
   controller --> mqtt
+
 ```
 
 ---
@@ -267,11 +268,11 @@ flowchart TD
 - [x] OpenAI & Groq support
 - [x] Memory and logging
 - [x] Intent recognition
+- [x] AutoGen agent swarm
 - [ ] Improve intent recognition accuracy
-- [ ] CrewAI agent swarm
+- [ ] Improve Agent flow and user control
 - [ ] Suggestions & autonomous actions
 - [ ] Better error handling and recovery
-- [ ] Unit tests and CI/CD
 
 ## License
 
