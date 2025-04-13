@@ -13,7 +13,7 @@ HomeyMind is a voice-controlled AI assistant for Homey smart home systems. It us
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.8 or higher =< 3.12
 - Homey Pro with MQTT enabled
 - OpenAI API key (optional, for cloud-based AI)
 - Microphone for voice input
@@ -225,6 +225,35 @@ HomeyMind/
 ```
 
 ### Running Tests
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+  mic[🎙️ Microphone]
+  wake[Wake Word (Vosk)]
+  recorder[🎧 Audio Recorder]
+  transcriber[🧠 Transcriber (Whisper/Vosk)]
+  autogen[🤖 AutoGenManager]
+  mqtt[📡 MQTTClient → Homey]
+
+  subgraph AutoGen Agents
+    intent[🧩 IntentParser]
+    assistant[🧠 HomeyAssistant]
+    controller[💡 DeviceController]
+  end
+
+  mic --> wake
+  wake --> recorder
+  recorder --> transcriber
+  transcriber --> autogen
+  autogen --> intent
+  autogen --> assistant
+  autogen --> controller
+  controller --> mqtt
+```
 
 ---
 
