@@ -15,9 +15,11 @@ The application follows this workflow:
 4. Execute device control through MQTT
 """
 
+import asyncio
 import os
 import time
 import yaml
+from dotenv import load_dotenv
 from audio.wake_word_vosk import wait_for_wake_word
 from audio.transcriber import transcribe_audio
 from homey.mqtt_client import get_client
@@ -25,8 +27,16 @@ from utils.intent_parser import parse_intent, validate_intent, Intent, ActionTyp
 from utils.device_list import KNOWN_DEVICES, update_device_list
 from utils.device_suggestion import suggest_closest_devices
 from llm_manager import LLMManager
-from memory import remember, recall
+from utils.memory import Memory
 import logging
+from datetime import datetime
+from typing import Dict, Any
+from audio.recorder import record_audio_v2
+from agents import CoordinatorAgent, PlannerAgent, HomeyAgent, LoggerAgent
+from homey.mqtt_client import MQTTClient
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Maak logs-map aan als die nog niet bestaat
 os.makedirs("logs", exist_ok=True)    
@@ -36,6 +46,14 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
+logger = logging.getLogger(__name__)
+
+# Add console handler to show logs in terminal
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(levelname)s: %(message)s')
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 def log_event(event: str) -> None:
     """
@@ -130,156 +148,79 @@ def execute_intent(intent: Intent, mqtt_client) -> None:
     else:
         raise ValueError(f"Unsupported action: {intent.action}")
 
-def main():
-    """
-    Main application entry point.
+async def process_command(text: str, config: Dict[str, Any], mqtt_client: MQTTClient, memory: Memory) -> None:
+    """Process a voice command using the agent system."""
+    # Initialize agents
+    coordinator = CoordinatorAgent(config, mqtt_client)
+    planner = PlannerAgent(config)
+    homey = HomeyAgent(config, mqtt_client)
+    logger_agent = LoggerAgent(config)
     
-    This function:
-    1. Loads configuration
-    2. Initializes MQTT client
-    3. Sets up LLM manager
-    4. Enters main command processing loop
-    """
-    try:
-        config = load_config()
-        log_event("Starting HomeyMind...")
+    # Create input data
+    input_data = {
+        "text": text,
+        "timestamp": datetime.now().isoformat(),
+        "agent": "user"
+    }
+    
+    # Process through coordinator
+    result = await coordinator.process(input_data)
+    
+    # Log the result
+    if result:
+        await logger_agent.process({
+            "type": "action",
+            "data": result,
+            "timestamp": datetime.now().isoformat(),
+            "agent": "coordinator"
+        })
 
-        # Initialize components
+async def main():
+    """Main function to run the HomeyMind system."""
+    try:
+        # Load configuration
+        config = load_config()
+        logger.info("Configuration loaded successfully")
+        
+        # Initialize MQTT client
         mqtt_client = get_client(config)
         mqtt_client.connect()
+        logger.info("MQTT client initialized")
         
-        # Initialize LLM manager
-        llm_manager = LLMManager(config)
-        wake_word_detector = wait_for_wake_word
-        transcriber = transcribe_audio
-        recorder = None  # Assuming Recorder is not used in the original code
-        device_list = KNOWN_DEVICES
-        device_suggester = suggest_closest_devices
-        intent_parser = parse_intent
-
-        # Update device list from MQTT
-        update_device_list(config)
+        # Initialize memory
+        memory = Memory()
+        logger.info("Memory system initialized")
         
-        log_event("HomeyMind started")
-        mqtt_client.publish_status(f"{config['audio']['wake_word'].capitalize()} is opgestart")
-        print(f"AI-agent klaar. Zeg 'Hey {config['audio']['wake_word'].capitalize()}' om te beginnen...")
-        
+        # Main loop
         while True:
             try:
                 # Wait for wake word
                 if not wait_for_wake_word(wake_word=config["audio"]["wake_word"]):
                     continue
-                print("* Wake word gedetecteerd!")
+                logger.info("Wake word detected")
                 mqtt_client.publish_tts_agent("Oké, ik luister")
                 mqtt_client.publish_status("Luistert naar opdracht")
                 
-                # Listen for command
-                print("* Luisteren naar opdracht...")
-                command = transcribe_audio()
-                if not command:
-                    continue
-                    
-                print(f"* Herkende tekst: {command}")
-                log_event(f"Gebruiker: {command}")
-                mqtt_client.publish_status(f"Herkenning: {command}")
+                # Record and transcribe command
+                duration = float(config["audio"]["record_seconds"])  # Convert to float
+                audio_data = record_audio_v2(duration)  # Pass as positional argument
+                text = transcribe_audio(audio_data)  # Use default parameters
+                logger.info(f"Transcribed command: {text}")
                 
-                # Process command through LLM
-                with open(config["llm"]["prompt_path"], "r", encoding="utf-8") as f:
-                    system_prompt = f.read()
-
-                prompt = f"""{system_prompt}
-
-Gebruiker: {command}
-Antwoord:"""
-
-                response = llm_manager.ask(prompt)
-                log_event(f"LLM-response: {response}")
+                # Process command
+                await process_command(text, config, mqtt_client, memory)
                 
-                # Check for mode switch
-                if response.strip() == "[INTERNAL_SWITCH] switch_mode local":
-                    mqtt_client.publish_tts_agent("Mijn OpenAI-tegoed is op. Ik gebruik nu de lokale AI.")
-                    mqtt_client.publish_status("Automatisch teruggeschakeld naar lokaal door quota")
-                    continue
-                
-                # Parse and validate intent
-                intent = parse_intent(response)
-                if not intent:
-                    print("[WARN] Geen intent herkend.")
-                    mqtt_client.publish_tts_agent("Ik heb je verzoek niet goed begrepen.")
-                    mqtt_client.publish_status("Intent niet herkend")
-                    continue
-                
-                # Handle mode switch intent
-                if intent.action_type == ActionType.SWITCH_MODE:
-                    mode = intent.parameters.get("mode")
-                    if mode in ["local", "cloud"]:
-                        llm_manager.set_mode(mode)
-                        remember("llm_mode", mode)
-                        msg = "Ik gebruik nu OpenAI." if mode == "cloud" else "Ik gebruik nu de lokale AI."
-                        mqtt_client.publish_tts_agent(msg)
-                        mqtt_client.publish_status(f"LLM switched naar {mode}")
-                    else:
-                        mqtt_client.publish_tts_agent("Ik weet niet welk AI-model je bedoelt.")
-                        mqtt_client.publish_status("Ongeldige mode opgegeven")
-                    continue
-                
-                # Validate device
-                if not validate_intent(intent, KNOWN_DEVICES):
-                    print(f"[WARN] '{intent.device}' is geen bekend apparaat.")
-                    suggestions = suggest_closest_devices(intent.device, KNOWN_DEVICES)
-                    if not suggestions:
-                        mqtt_client.publish_tts_agent(f"{intent.device} is geen bekend apparaat.")
-                        mqtt_client.publish_status(f"Onbekend apparaat: {intent.device}")
-                        continue
-
-                    mqtt_client.publish_tts_agent(f"'{intent.device}' is geen bekend apparaat.")
-                    for i, s in enumerate(suggestions, 1):
-                        mqtt_client.publish_tts_agent(f"Optie {i}: {s}")
-                    mqtt_client.publish_tts_agent("Zeg nul om te annuleren.")
-                    mqtt_client.publish_status("Wacht op apparaatkeuze")
-
-                    print("* Luisteren naar keuze...")
-                    choice_text = transcribe_audio()
-                    print(f"* Keuze herkend: {choice_text}")
-                    mqtt_client.publish_status(f"Keuze: {choice_text}")
-
-                    mapping = {
-                        "nul": 0, "één": 1, "een": 1, "twee": 2, "drie": 3,
-                        "0": 0, "1": 1, "2": 2, "3": 3
-                    }
-                    keuze = mapping.get(choice_text.strip().lower(), -1)
-
-                    if keuze == 0:
-                        mqtt_client.publish_tts_agent("Actie geannuleerd.")
-                        mqtt_client.publish_status("Gebruiker annuleerde keuze")
-                        continue
-                    elif 1 <= keuze <= len(suggestions):
-                        intent.device = suggestions[keuze - 1]
-                        mqtt_client.publish_tts_agent(f"Ik gebruik nu {intent.device}.")
-                    else:
-                        mqtt_client.publish_tts_agent("Ik heb geen geldige keuze gehoord.")
-                        mqtt_client.publish_status("Ongeldige keuze")
-                        continue
-                
-                # Execute intent
-                log_event(f"Intent: {intent}")
-                if mqtt_client.publish_action(intent):
-                    log_event(f"Actie uitgevoerd: {intent.action} op {intent.device}")
-                    mqtt_client.publish_tts_agent(f"Oké, ik heb {intent.action} uitgevoerd op {intent.device}.")
-                    mqtt_client.publish_status(f"{intent.action} uitgevoerd op {intent.device}")
-                else:
-                    mqtt_client.publish_tts_agent("Er is iets misgegaan bij het uitvoeren van de actie.")
-                    mqtt_client.publish_status("Actie mislukt")
-                
+            except KeyboardInterrupt:
+                logger.info("Command processing interrupted")
+                break
             except Exception as e:
-                log_event(f"Error processing command: {str(e)}")
-                mqtt_client.publish_tts_agent("Er is iets misgegaan bij het verwerken van je opdracht.")
-                mqtt_client.publish_status(f"Fout: {str(e)}")
+                logger.error(f"Error processing command: {str(e)}", exc_info=True)
+                mqtt_client.publish_tts_agent("Sorry, er ging iets mis. Probeer het nog eens.")
                 continue
-                
+    
     except Exception as e:
-        log_event(f"Fatal error: {str(e)}")
+        logger.error(f"Fatal error: {str(e)}")
         raise
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

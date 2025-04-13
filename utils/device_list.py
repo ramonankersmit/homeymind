@@ -8,11 +8,61 @@ from the MQTT broker.
 
 import os
 import json
-from typing import List, Dict
+from typing import List, Dict, Any, Optional
 from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
+from .memory import Memory
 
 # Cache file for device list
 DEVICE_CACHE_FILE = "cache/devices.json"
+
+@dataclass
+class Device:
+    name: str
+    type: str
+    capabilities: Dict[str, Any]
+    status: Dict[str, Any]
+    last_updated: datetime
+
+# Initialize memory system
+memory = Memory()
+
+# List of known devices with their capabilities
+KNOWN_DEVICES = [
+    Device(
+        name="licht woonkamer",
+        type="light",
+        capabilities={
+            "onoff": True,
+            "dim": True,
+            "color": True
+        },
+        status=memory.get_device_status("licht woonkamer") or {"on": False, "brightness": 100, "color": "white"},
+        last_updated=datetime.now()
+    ),
+    Device(
+        name="licht keuken",
+        type="light",
+        capabilities={
+            "onoff": True,
+            "dim": True
+        },
+        status=memory.get_device_status("licht keuken") or {"on": False, "brightness": 100},
+        last_updated=datetime.now()
+    ),
+    Device(
+        name="thermostat",
+        type="thermostat",
+        capabilities={
+            "temperature": True,
+            "setpoint": True,
+            "mode": True
+        },
+        status=memory.get_device_status("thermostat") or {"temperature": 20, "setpoint": 20, "mode": "auto"},
+        last_updated=datetime.now()
+    )
+]
 
 def load_devices_from_cache() -> List[str]:
     """
@@ -164,3 +214,47 @@ def update_device_list(config: Dict) -> List[str]:
     global KNOWN_DEVICES
     KNOWN_DEVICES = get_devices_from_mqtt(config)
     return KNOWN_DEVICES
+
+def get_device(name: str) -> Optional[Device]:
+    """
+    Get a device by name.
+    
+    Args:
+        name (str): Name of the device.
+        
+    Returns:
+        Optional[Device]: Device if found, None otherwise.
+    """
+    for device in KNOWN_DEVICES:
+        if device.name.lower() == name.lower():
+            return device
+    return None
+
+def get_device_status(name: str) -> Optional[Dict[str, Any]]:
+    """
+    Get the status of a device.
+    
+    Args:
+        name (str): Name of the device.
+        
+    Returns:
+        Optional[Dict[str, Any]]: Device status if found, None otherwise.
+    """
+    device = get_device(name)
+    if device:
+        return device.status
+    return None
+
+def update_device_status(name: str, status: Dict[str, Any]):
+    """
+    Update the status of a device.
+    
+    Args:
+        name (str): Name of the device.
+        status (Dict[str, Any]): New status of the device.
+    """
+    device = get_device(name)
+    if device:
+        device.status.update(status)
+        device.last_updated = datetime.now()
+        memory.save_device_status(name, device.status)

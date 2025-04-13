@@ -43,6 +43,10 @@ ENV/
 logs/
 *.log
 
+# Cache
+cache/
+.cache/
+
 # Local development
 .DS_Store
 Thumbs.db
