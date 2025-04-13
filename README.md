@@ -232,17 +232,17 @@ HomeyMind/
 
 ```mermaid
 flowchart TD
-  mic[🎙️ Microphone]
+  mic[Microphone]
   wake[Wake Word (Vosk)]
-  recorder[🎧 Audio Recorder]
-  transcriber[🧠 Transcriber (Whisper/Vosk)]
-  autogen[🤖 AutoGenManager]
-  mqtt[📡 MQTTClient → Homey]
+  recorder[Audio Recorder]
+  transcriber[Transcriber (Whisper/Vosk)]
+  autogen[AutoGenManager]
+  mqtt[MQTTClient → Homey]
 
-  subgraph AutoGen Agents
-    intent[🧩 IntentParser]
-    assistant[🧠 HomeyAssistant]
-    controller[💡 DeviceController]
+  subgraph AutoGen_Agents
+    intent[IntentParser]
+    assistant[HomeyAssistant]
+    controller[DeviceController]
   end
 
   mic --> wake
