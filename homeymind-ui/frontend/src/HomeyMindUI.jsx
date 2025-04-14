@@ -27,7 +27,7 @@ const MessageGroup = ({ messages, isLoading }) => {
   // User message
   if (mainMessage.sender === 'user') {
     return (
-      <Card className="mb-4 bg-blue-50">
+      <Card className="mb-4 bg-blue-100 text-gray-900">
         <CardContent className="flex flex-col gap-2 p-4">
           <div className="flex items-center gap-2">
             <span role="img" aria-label={mainMessage.role} className="text-xl">
@@ -36,13 +36,13 @@ const MessageGroup = ({ messages, isLoading }) => {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 {mainMessage.timestamp && (
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-600">
                     {mainMessage.timestamp}
                   </span>
                 )}
-                <p className="font-semibold text-sm text-gray-600">Jij</p>
+                <p className="font-semibold text-sm text-gray-900">Jij</p>
               </div>
-              <p className="whitespace-pre-wrap">{mainMessage.message}</p>
+              <p className="whitespace-pre-wrap text-gray-900">{mainMessage.message}</p>
             </div>
           </div>
         </CardContent>
@@ -53,7 +53,7 @@ const MessageGroup = ({ messages, isLoading }) => {
   // Agent response with thinking process
   return (
     <div className="mb-4">
-      <Card className={isLoading ? "bg-gray-50 border border-gray-200" : "bg-white"}>
+      <Card className={isLoading ? "bg-gray-100 border border-gray-300 text-gray-900" : "bg-white text-gray-900"}>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <span role="img" aria-label={isLoading ? "thinking" : "agent"} className="text-xl">
@@ -284,7 +284,17 @@ export default function HomeyMindUI() {
   }, [input, isLoading, addMessage, setupEventSource]);
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-gray-900 p-4 relative">
+      {/* Watermark Logo */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
+        <div className="flex items-center gap-4 transform scale-150">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 transform translate-x-2"></div>
+          </div>
+          <div className="text-6xl font-bold tracking-wider text-white">HomeyMind</div>
+        </div>
+      </div>
+      
       <div className="flex-1 overflow-y-auto p-4">
         {groupedMessages.map((group, idx) => (
           <MessageGroup 
@@ -296,10 +306,10 @@ export default function HomeyMindUI() {
         <div ref={messagesEndRef} />
       </div>
       
-      <div className="p-4 border-t">
+      <div className="p-4 border-t border-gray-700">
         <div className="flex gap-2">
           <Input
-            className="flex-1"
+            className="flex-1 bg-gray-800 text-white placeholder-gray-400 border-gray-700"
             placeholder="Type je bericht..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -310,7 +320,7 @@ export default function HomeyMindUI() {
             variant="default"
             onClick={sendMessage} 
             disabled={isLoading || !input.trim()}
-            className="px-4"
+            className="px-4 bg-blue-600 hover:bg-blue-700 text-white"
           >
             ➤
           </Button>
