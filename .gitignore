@@ -52,16 +52,40 @@ cache/
 .DS_Store
 Thumbs.db
 
-# Hulpbestanden
-start_homeymind_env.bat
+# Batch files
+*.bat
+!scripts/*.bat
 
-# Modelbestanden en downloads
+# Node.js
+node_modules/
+.npm
+.next
+.nuxt
+dist/
+build/
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+coverage/
+
+# Media files
+*.wav
+*.mp3
+*.m4a
+*.ogg
+input.*
+output.*
+
+# Model files and downloads
 models/
 *.zip
 *.bin
+*.onnx
+*.pt
+*.pth
 
-# Tijdelijke bestanden
-*.wav
-*.mp3
-input.wav
-output.wav
+# Temporary files
+tmp/
+temp/
