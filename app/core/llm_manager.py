@@ -10,7 +10,7 @@ import os
 import time
 import requests
 import openai
-from memory import remember, recall
+from app.core.memory import remember, recall
 
 class LLMManager:
     """

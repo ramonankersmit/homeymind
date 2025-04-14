@@ -11,7 +11,7 @@ from typing import Dict, Optional, Union, List, Any
 from dataclasses import dataclass
 from enum import Enum
 from .capability_manager import CapabilityManager
-from llm_manager import LLMManager
+from app.core.llm_manager import LLMManager
 
 class ActionType(Enum):
     """

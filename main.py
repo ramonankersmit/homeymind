@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 from audio.wake_word_vosk import wait_for_wake_word
 from audio.transcriber import transcribe_audio
 from homey.mqtt_client import get_client
-from utils.memory import Memory
+from app.core.memory import Memory
 import logging
 from datetime import datetime
 from typing import Dict, Any

@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from .memory import Memory
+from app.core.memory import Memory
 
 # Cache file for device list
 DEVICE_CACHE_FILE = "cache/devices.json"

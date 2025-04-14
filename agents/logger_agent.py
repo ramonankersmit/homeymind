@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from .base_agent import BaseAgent
-from utils.memory import Memory
+from app.core.memory import Memory
 
 class LoggerAgent(BaseAgent):
     """Logs events and actions to memory."""

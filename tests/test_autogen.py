@@ -4,7 +4,7 @@ Test script for AutoGen integration.
 
 import asyncio
 import yaml
-from homeymind_agents.autogen_manager import AutoGenManager
+from app.agents.autogen_manager import AutoGenManager
 
 async def test_autogen():
     """Test the AutoGen integration."""
