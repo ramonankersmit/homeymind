@@ -283,6 +283,15 @@ export default function HomeyMindUI() {
     }
   }, [input, isLoading, addMessage, setupEventSource]);
 
+  // Clear session function
+  const clearSession = useCallback(() => {
+    setMessages([]);
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+    }
+  }, []);
+
   return (
     <div className="flex flex-col h-screen bg-gray-900 p-4 relative">
       {/* Watermark Logo */}
@@ -295,6 +304,19 @@ export default function HomeyMindUI() {
         </div>
       </div>
       
+      {/* Clear Session Button */}
+      <div className="flex justify-end mb-4">
+        <Button
+          variant="outline"
+          onClick={clearSession}
+          className="text-white border-gray-700 hover:bg-gray-800"
+          disabled={isLoading || messages.length === 0}
+        >
+          🗑️ Wis Sessie
+        </Button>
+      </div>
+
+      {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4">
         {groupedMessages.map((group, idx) => (
           <MessageGroup 
@@ -306,6 +328,7 @@ export default function HomeyMindUI() {
         <div ref={messagesEndRef} />
       </div>
       
+      {/* Input Area */}
       <div className="p-4 border-t border-gray-700">
         <div className="flex gap-2">
           <Input
