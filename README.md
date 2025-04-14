@@ -184,14 +184,11 @@ pytest tests/
 ### Code Style
 * Python: PEP 8 standaard
   ```bash
-  black .
-  isort .
-  flake8
+  black . ; isort . ; flake8
   ```
 * JavaScript/React: Prettier
   ```bash
-  cd homeymind-ui/frontend
-  npm run format
+  cd homeymind-ui/frontend && npm run format
   ```
 
 ## Troubleshooting
@@ -247,45 +244,44 @@ homeymind/
 ## Architectuur
 
 ```mermaid
-flowchart TD
-    subgraph Frontend
-        UI["React UI"]
-        SSE["SSE Client"]
+graph TD
+    subgraph Frontend["Frontend Interface"]
+        UI[React UI<br>Real-time chat interface<br>Agent communicatie visualisatie]
+        SSE[SSE Client<br>Event streaming]
     end
 
-    subgraph Backend
-        API["FastAPI Server"]
-        AGM["AutoGen Manager"]
+    subgraph Backend["Backend Server"]
+        API[FastAPI Server<br>REST endpoints<br>SSE management]
+        AGM[AutoGen Manager<br>Agent orchestratie]
     end
 
-    subgraph Agents
-        HA["HomeyAssistant"]
-        IP["IntentParser"]
-        DC["DeviceController"]
+    subgraph Agents["Agent System"]
+        HA[HomeyAssistant<br>Hoofdassistent]
+        IP[IntentParser<br>Commando interpretatie]
+        DC[DeviceController<br>Apparaat aansturing]
     end
 
-    subgraph Homey
-        HC["Homey Controller"]
-        Devices["Homey Devices"]
+    subgraph Homey["Homey Integratie"]
+        HC[Homey Controller<br>MQTT communicatie]
+        Devices[Homey Devices<br>Lampen, thermostaat, etc]
     end
 
-    UI --> |"HTTP POST /chat"| API
-    UI --> |"SSE /chat"| SSE
+    UI --> |HTTP POST /chat| API
+    UI --> |SSE /chat| SSE
     SSE --> API
     
     API --> AGM
-    AGM --> |"1. Parse Intent"| IP
-    AGM --> |"2. Process Request"| HA
-    AGM --> |"3. Execute Action"| DC
+    AGM --> |1. Parse Intent| IP
+    AGM --> |2. Process Request| HA
+    AGM --> |3. Execute Action| DC
     
     DC --> HC
-    HC --> |"API/MQTT"| Devices
+    HC --> |MQTT| Devices
 
-    %% Streaming responses
-    IP --> |"Real-time updates"| AGM
-    HA --> |"Real-time updates"| AGM
-    DC --> |"Real-time updates"| AGM
-    AGM --> |"SSE Events"| API
+    IP --> |Real-time updates| AGM
+    HA --> |Real-time updates| AGM
+    DC --> |Real-time updates| AGM
+    AGM --> |SSE Events| API
     API --> SSE
     SSE --> UI
 ```
@@ -293,17 +289,17 @@ flowchart TD
 ## Roadmap
 
 ### Versie 1.0 (Huidig)
-* ✅ Basis chat interface
-* ✅ LLM integratie (Ollama & OpenAI)
-* ✅ Homey MQTT integratie
-* ✅ Real-time streaming responses
-* ✅ Multi-agent systeem
-* ✅ CLI voice interactie met Vosk
+✅ Basis chat interface<br>
+✅ LLM integratie (Ollama & OpenAI)<br>
+✅ Homey MQTT integratie<br>
+✅ Real-time streaming responses<br>
+✅ Multi-agent systeem<br>
+✅ CLI voice interactie met Vosk
 
 ### Versie 1.1 (Gepland)
-* 🔄 Voice integratie in web interface
-* 🔄 Verbeterde agent communicatie
-* 🔄 Uitgebreide apparaat ondersteuning
+🔄 Voice integratie in web interface<br>
+🔄 Verbeterde agent communicatie<br>
+🔄 Uitgebreide apparaat ondersteuning
 
 ### Toekomstige Features
 * 📋 Geschiedenis van gesprekken
