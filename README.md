@@ -246,38 +246,55 @@ homeymind/
 ```mermaid
 graph TD
     subgraph Frontend["Frontend Interface"]
-        UI[React UI<br>Real-time chat interface<br>Agent communicatie visualisatie]
-        SSE[SSE Client<br>Event streaming]
+        UI["React UI<br>Real-time chat interface<br>Agent visualisatie"]
+        SSE["SSE Client<br>Event streaming"]
+    end
+
+    subgraph CLI["CLI Interface"]
+        WW["Wake Word Detector<br>Vosk Model"]
+        REC["Audio Recorder<br>Sounddevice"]
+        STT["Speech-to-Text<br>Vosk Transcriber"]
     end
 
     subgraph Backend["Backend Server"]
-        API[FastAPI Server<br>REST endpoints<br>SSE management]
-        AGM[AutoGen Manager<br>Agent orchestratie]
+        API["FastAPI Server<br>REST endpoints<br>SSE management"]
+        AGM["AutoGen Manager<br>Agent orchestratie"]
     end
 
     subgraph Agents["Agent System"]
-        HA[HomeyAssistant<br>Hoofdassistent]
-        IP[IntentParser<br>Commando interpretatie]
-        DC[DeviceController<br>Apparaat aansturing]
+        HA["HomeyAssistant<br>Hoofdassistent"]
+        IP["IntentParser<br>Commando interpretatie"]
+        DC["DeviceController<br>Apparaat aansturing"]
     end
 
     subgraph Homey["Homey Integratie"]
-        HC[Homey Controller<br>MQTT communicatie]
-        Devices[Homey Devices<br>Lampen, thermostaat, etc]
+        HC["Homey Controller<br>MQTT communicatie"]
+        Devices["Homey Devices<br>Lampen, thermostaat, etc"]
+        TTS["Text-to-Speech<br>Homey feedback"]
     end
 
+    %% Web Interface Flow
     UI --> |HTTP POST /chat| API
     UI --> |SSE /chat| SSE
     SSE --> API
-    
+
+    %% CLI Voice Flow
+    WW --> |Wake word detected| REC
+    REC --> |Audio data| STT
+    STT --> |Transcribed text| AGM
+
+    %% Agent Flow
     API --> AGM
-    AGM --> |1. Parse Intent| IP
-    AGM --> |2. Process Request| HA
-    AGM --> |3. Execute Action| DC
-    
+    AGM --> |1 - Parse Intent| IP
+    AGM --> |2 - Process Request| HA
+    AGM --> |3 - Execute Action| DC
+
+    %% Homey Integration
     DC --> HC
     HC --> |MQTT| Devices
+    HC --> |TTS Command| TTS
 
+    %% Real-time Updates
     IP --> |Real-time updates| AGM
     HA --> |Real-time updates| AGM
     DC --> |Real-time updates| AGM
