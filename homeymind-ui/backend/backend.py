@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 from typing import AsyncGenerator
+from utils.device_list import KNOWN_DEVICES, update_device_list, DEFAULT_DEVICES
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -25,7 +26,8 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -105,3 +107,53 @@ async def stream_chat(request: Request, message: str):
                 yield await agent_message_handler(partial)
     
     return EventSourceResponse(event_generator())
+
+def load_config():
+    with open("config.yaml", "r") as f:
+        return yaml.safe_load(f)
+
+@app.get("/devices")
+async def get_devices():
+    config = load_config()
+    
+    # Try to update the device list from MQTT
+    try:
+        logger.info("Updating device list from MQTT...")
+        devices = update_device_list(config)
+        logger.info(f"Got {len(devices)} devices")
+        
+        # Format devices for the frontend
+        formatted_devices = []
+        for device in devices:
+            formatted_devices.append({
+                "name": device.name,
+                "id": device.name.lower().replace(" ", "_"),
+                "type": device.type,
+                "capabilities": device.capabilities,
+                "status": device.status,
+                "last_updated": device.last_updated.isoformat()
+            })
+        
+        logger.info(f"Returning {len(formatted_devices)} formatted devices")
+        
+        # Check if we're using default devices
+        if devices == DEFAULT_DEVICES:
+            return {
+                "devices": formatted_devices,
+                "error": {
+                    "message": "Kan geen verbinding maken met MQTT broker. Gebruik makend van standaard apparaten.",
+                    "details": "Using default devices"
+                }
+            }
+        
+        return {"devices": formatted_devices, "error": None}
+        
+    except Exception as e:
+        logger.error(f"Error getting devices: {e}")
+        return {
+            "devices": [], 
+            "error": {
+                "message": "Kan geen verbinding maken met MQTT broker. Gebruik makend van standaard apparaten.",
+                "details": str(e)
+            }
+        }

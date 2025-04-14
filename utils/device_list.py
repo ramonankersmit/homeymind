@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from app.core.memory import Memory
+from app.core.memory import recall, remember
 
 # Cache file for device list
 DEVICE_CACHE_FILE = "cache/devices.json"
@@ -25,11 +25,8 @@ class Device:
     status: Dict[str, Any]
     last_updated: datetime
 
-# Initialize memory system
-memory = Memory()
-
-# List of known devices with their capabilities
-KNOWN_DEVICES = [
+# List of default devices
+DEFAULT_DEVICES = [
     Device(
         name="licht woonkamer",
         type="light",
@@ -38,7 +35,7 @@ KNOWN_DEVICES = [
             "dim": True,
             "color": True
         },
-        status=memory.get_device_status("licht woonkamer") or {"on": False, "brightness": 100, "color": "white"},
+        status=recall("device_status_licht_woonkamer") or {"on": False, "brightness": 100, "color": "white"},
         last_updated=datetime.now()
     ),
     Device(
@@ -48,7 +45,7 @@ KNOWN_DEVICES = [
             "onoff": True,
             "dim": True
         },
-        status=memory.get_device_status("licht keuken") or {"on": False, "brightness": 100},
+        status=recall("device_status_licht_keuken") or {"on": False, "brightness": 100},
         last_updated=datetime.now()
     ),
     Device(
@@ -59,10 +56,13 @@ KNOWN_DEVICES = [
             "setpoint": True,
             "mode": True
         },
-        status=memory.get_device_status("thermostat") or {"temperature": 20, "setpoint": 20, "mode": "auto"},
+        status=recall("device_status_thermostat") or {"temperature": 20, "setpoint": 20, "mode": "auto"},
         last_updated=datetime.now()
     )
 ]
+
+# Initialize KNOWN_DEVICES with default devices
+KNOWN_DEVICES = DEFAULT_DEVICES.copy()
 
 def load_devices_from_cache() -> List[str]:
     """
@@ -198,10 +198,7 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
         print(f"[ERROR] Error connecting to MQTT: {e}")
         return []
 
-# Load devices from cache initially
-KNOWN_DEVICES = load_devices_from_cache()
-
-def update_device_list(config: Dict) -> List[str]:
+def update_device_list(config: Dict) -> List[Device]:
     """
     Update the device list from MQTT and return the new list.
     
@@ -209,10 +206,31 @@ def update_device_list(config: Dict) -> List[str]:
         config (Dict): Configuration dictionary containing MQTT settings
         
     Returns:
-        List[str]: Updated list of device names
+        List[Device]: Updated list of devices
     """
     global KNOWN_DEVICES
-    KNOWN_DEVICES = get_devices_from_mqtt(config)
+    try:
+        mqtt_devices = get_devices_from_mqtt(config)
+        if mqtt_devices:
+            # Convert MQTT devices to Device objects
+            KNOWN_DEVICES = [
+                Device(
+                    name=device_name,
+                    type="light" if "licht" in device_name.lower() else "switch",
+                    capabilities={"onoff": True},
+                    status=recall(f"device_status_{device_name}") or {"on": False},
+                    last_updated=datetime.now()
+                )
+                for device_name in mqtt_devices
+            ]
+        else:
+            print("[INFO] Using default devices as MQTT fetch failed")
+            KNOWN_DEVICES = DEFAULT_DEVICES.copy()
+    except Exception as e:
+        print(f"[ERROR] Error updating device list: {e}")
+        print("[INFO] Falling back to default devices")
+        KNOWN_DEVICES = DEFAULT_DEVICES.copy()
+    
     return KNOWN_DEVICES
 
 def get_device(name: str) -> Optional[Device]:
@@ -257,4 +275,4 @@ def update_device_status(name: str, status: Dict[str, Any]):
     if device:
         device.status.update(status)
         device.last_updated = datetime.now()
-        memory.save_device_status(name, device.status)
+        remember("device_status_" + name.replace(" ", "_").lower(), device.status)

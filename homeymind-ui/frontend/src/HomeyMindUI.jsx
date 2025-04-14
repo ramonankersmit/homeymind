@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent } from "./components/ui/card";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
+import DevicesPanel from './components/DevicesPanel';
+import Notification from './components/Notification';
 
 // Agent icons mapping
 const AGENT_ICONS = {
@@ -143,8 +145,59 @@ export default function HomeyMindUI() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [devices, setDevices] = useState([]);
+  const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
+  const [lastFetched, setLastFetched] = useState(null);
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
+
+  const fetchDevices = useCallback(async () => {
+    try {
+      setIsRefreshingDevices(true);
+      const response = await fetch('http://localhost:8000/devices');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log('Fetched devices data:', data); // Debug log for entire response
+      if (Array.isArray(data.devices)) {
+        setDevices(data.devices);
+        // Set the current time as the last fetched time
+        const now = new Date();
+        setLastFetched(now.toLocaleTimeString('nl-NL', { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          second: '2-digit'
+        }));
+      } else {
+        console.error('Devices data is not an array:', data);
+        setDevices([]);
+      }
+      // Handle error or warning from backend
+      if (data.error) {
+        console.log('Error data received:', data.error); // Debug log for error
+        if (typeof data.error === 'object' && data.error.message) {
+          console.log('Setting error message:', data.error.message); // Debug log for message
+          setError(data.error.message);
+        } else {
+          console.log('Setting error string:', data.error); // Debug log for string error
+          setError(data.error);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching devices:', error);
+      setDevices([]);
+      setError('Kon geen verbinding maken met de server');
+    } finally {
+      setIsRefreshingDevices(false);
+    }
+  }, []);
+
+  // Fetch devices on component mount
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
 
   // Group messages by conversation
   const groupedMessages = messages.reduce((groups, message) => {
@@ -293,62 +346,68 @@ export default function HomeyMindUI() {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 p-4 relative">
-      {/* Watermark Logo */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-        <div className="flex items-center gap-4 transform scale-150">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 transform translate-x-2"></div>
-          </div>
-          <div className="text-6xl font-bold tracking-wider text-white">HomeyMind</div>
-        </div>
-      </div>
-      
-      {/* Clear Session Button */}
-      <div className="flex justify-end mb-4">
-        <Button
-          variant="outline"
-          onClick={clearSession}
-          className="text-white border-gray-700 hover:bg-gray-800"
-          disabled={isLoading || messages.length === 0}
-        >
-          🗑️ Wis Sessie
-        </Button>
-      </div>
-
-      {/* Chat Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {groupedMessages.map((group, idx) => (
-          <MessageGroup 
-            key={idx} 
-            messages={group} 
-            isLoading={isLoading && idx === groupedMessages.length - 1}
+    <div className="flex h-screen bg-gray-900 text-white p-4 gap-4">
+      {/* Main chat area */}
+      <div className="flex-1 flex flex-col relative">
+        {/* Error Notification */}
+        {error && (
+          <Notification
+            message={error}
+            onClose={() => setError(null)}
+            type="error"
           />
-        ))}
-        <div ref={messagesEndRef} />
-      </div>
-      
-      {/* Input Area */}
-      <div className="p-4 border-t border-gray-700">
+        )}
+
+        {/* Clear Session Button */}
+        <div className="flex justify-end mb-4">
+          <Button
+            variant="outline"
+            onClick={clearSession}
+            className="text-white border-gray-700 hover:bg-gray-800"
+            disabled={isLoading || messages.length === 0}
+          >
+            🗑️ Wis Sessie
+          </Button>
+        </div>
+
+        {/* Messages area */}
+        <div className="flex-1 overflow-y-auto mb-4">
+          {groupedMessages.map((group, index) => (
+            <MessageGroup
+              key={index}
+              messages={group}
+              isLoading={isLoading && index === groupedMessages.length - 1}
+            />
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input area */}
         <div className="flex gap-2">
           <Input
-            className="flex-1 bg-gray-800 text-white placeholder-gray-400 border-gray-700"
-            placeholder="Type je bericht..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder="Type een bericht..."
+            className="flex-1 bg-gray-800 text-white border-gray-700"
             disabled={isLoading}
           />
-          <Button 
-            variant="default"
-            onClick={sendMessage} 
+          <Button
+            onClick={sendMessage}
+            className="bg-blue-600 text-white hover:bg-blue-700"
             disabled={isLoading || !input.trim()}
-            className="px-4 bg-blue-600 hover:bg-blue-700 text-white"
           >
-            ➤
+            Verstuur
           </Button>
         </div>
       </div>
+
+      {/* Devices Panel */}
+      <DevicesPanel 
+        devices={devices} 
+        onRefresh={fetchDevices}
+        lastFetched={lastFetched}
+      />
     </div>
   );
 } 
