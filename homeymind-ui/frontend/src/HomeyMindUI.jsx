@@ -347,6 +347,16 @@ export default function HomeyMindUI() {
 
   return (
     <div className="flex h-screen bg-gray-900 text-white p-4 gap-4">
+      {/* Watermark Logo */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
+        <div className="flex items-center gap-4 transform scale-150">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 transform translate-x-2"></div>
+          </div>
+          <div className="text-6xl font-bold tracking-wider text-white">HomeyMind</div>
+        </div>
+      </div>
+
       {/* Main chat area */}
       <div className="flex-1 flex flex-col relative">
         {/* Error Notification */}
