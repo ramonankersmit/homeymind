@@ -150,21 +150,59 @@ export default function HomeyMindUI() {
   const [showDevices, setShowDevices] = useState(true);
   const [devicesPanelWidth, setDevicesPanelWidth] = useState(320);
   const [isResizing, setIsResizing] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [isLoadingDevices, setIsLoadingDevices] = useState(true);
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
   const lastPanelWidth = useRef(devicesPanelWidth);
 
+  // Add global notification handler
+  useEffect(() => {
+    window.showNotification = ({ type, message, details }) => {
+      setNotification({ type, message, details });
+    };
+    return () => {
+      window.showNotification = undefined;
+    };
+  }, []);
+
   // Fetch devices
   const fetchDevices = useCallback(async () => {
     try {
+      setIsLoadingDevices(true);
       const response = await fetch('http://localhost:8000/devices');
       const data = await response.json();
-      if (data.devices) {
-        setDevices(data.devices);
-        setLastFetched(new Date().toLocaleTimeString());
+      
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to fetch devices');
+      }
+
+      setDevices(data.devices || []);
+      setLastFetched(new Date().toLocaleTimeString());
+
+      // Show warning or success message if present
+      if (data.warning) {
+        window.showNotification({
+          type: 'warning',
+          message: data.warning.message,
+          details: data.warning.details
+        });
+      } else if (data.success) {
+        window.showNotification({
+          type: 'success',
+          message: data.success.message,
+          details: data.success.details
+        });
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
+      window.showNotification({
+        type: 'error',
+        message: 'Fout bij het ophalen van apparaten',
+        details: error.message
+      });
+    } finally {
+      setIsLoadingDevices(false);
     }
   }, []);
 
@@ -365,6 +403,15 @@ export default function HomeyMindUI() {
 
   return (
     <div className="flex h-screen bg-[#0f1218]">
+      {notification && (
+        <Notification
+          type={notification.type}
+          message={notification.message}
+          details={notification.details}
+          onClose={() => setNotification(null)}
+        />
+      )}
+      
       {/* Main chat area */}
       <div className="flex-1 flex flex-col relative">
         {/* Watermark Logo */}
@@ -449,6 +496,7 @@ export default function HomeyMindUI() {
             devices={devices}
             onRefresh={fetchDevices}
             lastFetched={lastFetched}
+            isLoading={isLoadingDevices}
           />
         </div>
       )}

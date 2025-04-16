@@ -1,0 +1,55 @@
+{
+  "demo_devices": [
+    {
+      "id": "demo1",
+      "name": "[Demo] Woonkamer Lamp",
+      "type": "light",
+      "capabilities": ["onoff", "dim"],
+      "state": {
+        "onoff": true,
+        "dim": 80
+      }
+    },
+    {
+      "id": "demo2",
+      "name": "[Demo] Thermostaat",
+      "type": "thermostat",
+      "capabilities": ["target_temperature", "measure_temperature"],
+      "state": {
+        "target_temperature": 21.5,
+        "measure_temperature": 20.8
+      }
+    },
+    {
+      "id": "demo3",
+      "name": "[Demo] Bewegingssensor",
+      "type": "sensor",
+      "capabilities": ["alarm_motion", "measure_battery"],
+      "state": {
+        "alarm_motion": false,
+        "measure_battery": 85
+      }
+    },
+    {
+      "id": "demo4",
+      "name": "[Demo] TV",
+      "type": "tv",
+      "capabilities": ["onoff", "volume_set"],
+      "state": {
+        "onoff": false,
+        "volume_set": 35
+      }
+    },
+    {
+      "id": "demo5",
+      "name": "[Demo] Rolluik Slaapkamer",
+      "type": "blinds",
+      "capabilities": ["windowcoverings_set", "measure_battery"],
+      "state": {
+        "windowcoverings_set": 100,
+        "measure_battery": 90
+      }
+    }
+  ],
+  "actual_devices": []
+} 

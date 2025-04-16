@@ -100,13 +100,6 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
         
     Returns:
         List[str]: List of discovered device names
-        
-    This function:
-    1. Connects to the MQTT broker
-    2. Subscribes to device topics
-    3. Collects device information
-    4. Filters for devices with onoff or dim capabilities
-    5. Saves the list to cache
     """
     import paho.mqtt.client as mqtt
     from time import sleep
@@ -114,14 +107,14 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
     devices = defaultdict(dict)
     client = None
     ready = False
+    discovery_complete = False
 
     def on_connect(client, userdata, flags, rc):
         nonlocal ready
         if rc == 0:
             print("[OK] Connected to MQTT broker")
-            client.subscribe("homey/devices/+/name")  # Get device names
-            client.subscribe("homey/devices/+/capabilities/+/name")  # Get capability names
-            client.subscribe("homey/devices/+/capabilities/+/value")  # Get capability values
+            # Subscribe to all device related topics
+            client.subscribe("homey/#")
             ready = True
 
     def on_message(client, userdata, msg):
@@ -133,29 +126,43 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
                 
                 if "info" not in devices[device_id]:
                     devices[device_id]["info"] = {}
+                    devices[device_id]["capabilities"] = {}
                 
+                # Device name
                 if len(parts) == 4 and parts[3] == "name":
                     payload = msg.payload.decode().strip('"')
                     devices[device_id]["info"]["name"] = payload
                     print(f"Found device: {payload}")
+                
+                # Device type/class
+                elif len(parts) == 4 and parts[3] == "class":
+                    payload = msg.payload.decode().strip('"')
+                    devices[device_id]["info"]["type"] = payload
+                
+                # Capabilities
                 elif len(parts) > 4 and parts[3] == "capabilities":
                     capability = parts[4]
-                    field = parts[5]
+                    if capability not in devices[device_id]["capabilities"]:
+                        devices[device_id]["capabilities"][capability] = {}
                     
-                    if capability not in devices[device_id]:
-                        devices[device_id][capability] = {}
-                    
-                    if field == "name":
+                    if len(parts) > 5:
+                        field = parts[5]
                         payload = msg.payload.decode().strip('"')
-                        devices[device_id][capability]["name"] = payload
-                    elif field == "value":
-                        payload = msg.payload.decode()
-                        devices[device_id][capability]["value"] = payload
+                        devices[device_id]["capabilities"][capability][field] = payload
+                
+                # State/values
+                elif len(parts) > 4 and parts[3] == "state":
+                    capability = parts[4]
+                    if "state" not in devices[device_id]:
+                        devices[device_id]["state"] = {}
+                    devices[device_id]["state"][capability] = msg.payload.decode()
+
         except Exception as e:
             print(f"[ERROR] Error processing message: {e}")
 
     client = mqtt.Client()
-    client.username_pw_set(config["mqtt"]["username"], config["mqtt"]["password"])
+    if "username" in config["mqtt"] and "password" in config["mqtt"]:
+        client.username_pw_set(config["mqtt"]["username"], config["mqtt"]["password"])
     client.on_connect = on_connect
     client.on_message = on_message
 
@@ -163,7 +170,7 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
         client.connect(config["mqtt"]["host"], config["mqtt"]["port"], 60)
         client.loop_start()
         
-        # Wait for connection and messages
+        # Wait for connection
         timeout = 10
         while timeout > 0 and not ready:
             sleep(1)
@@ -173,27 +180,40 @@ def get_devices_from_mqtt(config: Dict) -> List[str]:
             print("[ERROR] Timeout waiting for MQTT connection")
             return []
             
-        # Wait for device messages
+        # Wait longer for device messages (30 seconds)
         print("Waiting for Homey device messages...")
-        sleep(15)  # Wait for device messages
+        sleep(30)
         client.loop_stop()
         client.disconnect()
         
-        # Process devices
-        device_list = []
+        # Process and format devices
+        formatted_devices = []
         for device_id, data in devices.items():
-            device_name = data.get("info", {}).get("name", "").lower().replace(" ", "_")
-            if not device_name:
+            if "info" not in data or "name" not in data["info"]:
                 continue
                 
-            # Only include devices with onoff or dim capability
-            if "onoff" in data or "dim" in data:
-                device_list.append(device_name)
-                print(f"Added device: {device_name}")
+            device = {
+                "id": device_id,
+                "name": data["info"]["name"],
+                "type": data["info"].get("type", "unknown"),
+                "capabilities": list(data.get("capabilities", {}).keys()),
+                "state": {}
+            }
+            
+            # Add state information
+            if "state" in data:
+                device["state"] = {
+                    k: v for k, v in data["state"].items()
+                    if not (v.startswith('{') or v.startswith('['))  # Filter out complex JSON values
+                }
+            
+            formatted_devices.append(device)
+            print(f"Added device: {device['name']} ({len(device['capabilities'])} capabilities)")
         
         # Save to cache
-        save_devices_to_cache(device_list)
-        return sorted(device_list)
+        save_devices_to_cache(formatted_devices)
+        return formatted_devices
+        
     except Exception as e:
         print(f"[ERROR] Error connecting to MQTT: {e}")
         return []
