@@ -69,7 +69,6 @@ ollama pull mixtral
 git clone https://github.com/ramonankersmit/homeymind.git
 cd homeymind
 ```
-
 2. Maak een virtual environment aan:
 ```bash
 python -m venv venv
@@ -92,7 +91,6 @@ cd homeymind-ui/frontend
 npm install
 cd ../..
 ```
-
 5. Configureer de applicatie:
 ```bash
 cp config.example.yaml config.yaml
@@ -325,3 +323,5 @@ graph TD
 * 📱 Progressive Web App (PWA)
 * 🌐 Meertalige ondersteuning
 * 📊 Gebruiksstatistieken en analyses
+
+

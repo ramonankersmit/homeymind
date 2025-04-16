@@ -216,9 +216,7 @@ def on_mqtt_message(client, userdata, msg):
                         "id": device_id,
                         "name": "",
                         "type": "",
-                        "deviceType": "",
                         "capabilities": [],
-                        "icon": "",
                         "state": {},
                         "zone_id": None
                     }
@@ -229,16 +227,6 @@ def on_mqtt_message(client, userdata, msg):
                     elif parts[3] == "zone":
                         zone_id = msg.payload.decode().strip('"')
                         actual_devices[device_id]["zone_id"] = zone_id
-                    elif parts[3] == "icon":
-                        actual_devices[device_id]["icon"] = msg.payload.decode().strip('"')
-                    elif parts[3] == "class":  # Handle class updates
-                        device_class = msg.payload.decode().strip('"')
-                        actual_devices[device_id]["type"] = device_class
-                        # Update icon if not set
-                        if not actual_devices[device_id]["icon"]:
-                            actual_devices[device_id]["icon"] = device_class
-                    elif parts[3] == "type":  # Handle type updates
-                        actual_devices[device_id]["deviceType"] = msg.payload.decode().strip('"')
                 
                 elif len(parts) >= 6 and parts[3] == "capabilities":
                     capability = parts[4]
@@ -326,32 +314,21 @@ async def fetch_devices():
                             zone["devices"] = []
                         
                         for device_id, device_data in data.items():
-                            device_class = device_data.get("class", "")
-                            device_type = device_data.get("type", "")
-                            
                             if device_id not in actual_devices:
                                 actual_devices[device_id] = {
                                     "id": device_id,
                                     "name": device_data["name"],
-                                    "type": device_class,  # Use class as primary type
-                                    "deviceType": device_type,  # Store original type
+                                    "type": device_data.get("class", ""),
                                     "zone_id": device_data.get("zone"),
                                     "capabilities": device_data.get("capabilities", []),
-                                    "icon": device_data.get("icon", device_class),  # Fallback to class if no icon
-                                    "iconObj": device_data.get("iconObj", {}),
-                                    "uiIndicator": device_data.get("uiIndicator", ""),
                                     "state": {}
                                 }
                             else:
                                 actual_devices[device_id].update({
                                     "name": device_data["name"],
-                                    "type": device_class,  # Use class as primary type
-                                    "deviceType": device_type,  # Store original type
+                                    "type": device_data.get("class", ""),
                                     "zone_id": device_data.get("zone"),
-                                    "capabilities": device_data.get("capabilities", []),
-                                    "icon": device_data.get("icon", device_class),  # Fallback to class if no icon
-                                    "iconObj": device_data.get("iconObj", {}),
-                                    "uiIndicator": device_data.get("uiIndicator", "")
+                                    "capabilities": device_data.get("capabilities", [])
                                 })
                             
                             zone_id = device_data.get("zone")
@@ -361,6 +338,7 @@ async def fetch_devices():
                         
                         logger.info(f"Fetched {len(data)} devices")
                     else:
+                        response_text = await response.text()
                         logger.error(f"Failed to fetch devices: {response.status}")
     except Exception as e:
         logger.error(f"Error fetching devices: {str(e)}")
@@ -371,6 +349,7 @@ async def get_devices():
     config = load_devices_config()
     demo_devices = config.get("demo_devices", [])
     
+    # Only show demo devices if there are no actual devices or MQTT is not connected
     if not mqtt_connected or len(actual_devices) == 0:
         return {
             "zones": [{
@@ -390,27 +369,29 @@ async def get_devices():
             ]
         }
     
+    # Group actual devices by zones
     zones_with_devices = []
+    
+    # Create default "Overig" zone
     other_zone = {
         "id": "other",
         "name": "Overig",
         "devices": []
     }
     
+    # Process each device
     for device_id, device in actual_devices.items():
+        # Prepare device data for response
         device_data = {
             "id": device["id"],
             "name": device["name"],
             "type": device["type"],
-            "deviceType": device.get("deviceType", ""),
-            "capabilities": device["capabilities"],
+            "capabilities": device["capabilities"],  # Now a list
             "state": device["state"],
-            "zone_id": device["zone_id"],
-            "icon": device.get("icon", device["type"]),  # Fallback to type if no icon
-            "iconObj": device.get("iconObj", {}),
-            "uiIndicator": device.get("uiIndicator", "")
+            "zone_id": device["zone_id"]
         }
         
+        # Add to appropriate zone
         if device["zone_id"] and device["zone_id"] in zones:
             zone_exists = False
             for zone in zones_with_devices:
@@ -427,6 +408,7 @@ async def get_devices():
         else:
             other_zone["devices"].append(device_data)
     
+    # Add "Overig" zone if it has devices
     if other_zone["devices"]:
         zones_with_devices.append(other_zone)
     
