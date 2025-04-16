@@ -4,6 +4,8 @@ import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import DevicesPanel from './components/DevicesPanel';
 import Notification from './components/Notification';
+import { format } from 'date-fns';
+import { nl } from 'date-fns/locale';
 
 // Agent icons mapping
 const AGENT_ICONS = {
@@ -144,8 +146,8 @@ const MessageGroup = ({ messages, isLoading }) => {
 export default function HomeyMindUI() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [devices, setDevices] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [zones, setZones] = useState([]);
   const [lastFetched, setLastFetched] = useState(null);
   const [showDevices, setShowDevices] = useState(true);
   const [devicesPanelWidth, setDevicesPanelWidth] = useState(320);
@@ -177,15 +179,14 @@ export default function HomeyMindUI() {
         throw new Error(data.detail || 'Failed to fetch devices');
       }
 
-      setDevices(data.devices || []);
-      setLastFetched(new Date().toLocaleTimeString());
+      setZones(data.zones || []);
+      setLastFetched(format(new Date(), 'HH:mm:ss', { locale: nl }));
 
       // Show warning or success message if present
-      if (data.warning) {
-        window.showNotification({
+      if (data.warnings && data.warnings.length > 0) {
+        setNotification({
           type: 'warning',
-          message: data.warning.message,
-          details: data.warning.details
+          message: data.warnings[0]
         });
       } else if (data.success) {
         window.showNotification({
@@ -493,7 +494,7 @@ export default function HomeyMindUI() {
           className="border-l border-gray-800 transition-all duration-75 ease-in-out"
         >
           <DevicesPanel
-            devices={devices}
+            zones={zones}
             onRefresh={fetchDevices}
             lastFetched={lastFetched}
             isLoading={isLoadingDevices}

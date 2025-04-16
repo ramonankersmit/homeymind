@@ -14,6 +14,8 @@ import logging
 from datetime import datetime
 from paho.mqtt import client as mqtt_client
 from dotenv import load_dotenv
+import aiohttp
+import async_timeout
 
 # Load environment variables from root .env file
 project_root = Path(__file__).parent.parent.parent
@@ -21,7 +23,7 @@ env_path = project_root / ".env"
 load_dotenv(env_path)
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -35,6 +37,12 @@ MQTT_TOPIC = "homey/#"
 MQTT_REQUEST_TOPIC = "homey/request_devices"
 MQTT_CLIENT_ID = "homeymind_backend"
 MQTT_TIMEOUT = 10  # seconds
+HOMEY_API_KEY = os.getenv("HOMEY_API_KEY", "")
+
+# Homey API endpoints
+HOMEY_API_BASE = f"http://{MQTT_BROKER}"
+HOMEY_API_ZONES = f"{HOMEY_API_BASE}/api/manager/zones/zone"
+HOMEY_API_DEVICES = f"{HOMEY_API_BASE}/api/manager/devices/device"
 
 # Device type mapping
 DEVICE_TYPE_MAPPING = {
@@ -49,6 +57,7 @@ DEVICE_TYPE_MAPPING = {
 }
 
 logger.info(f"Using MQTT broker at {MQTT_BROKER}:{MQTT_PORT}")
+logger.info(f"Using Homey API at {HOMEY_API_BASE}")
 
 # Create demo devices
 DEMO_DEVICES = [
@@ -112,6 +121,7 @@ if not DEVICES_CONFIG_FILE.exists():
     with open(DEVICES_CONFIG_FILE, 'w') as f:
         json.dump({"demo_devices": DEMO_DEVICES, "actual_devices": []}, f, indent=2)
 
+# Create FastAPI app
 app = FastAPI()
 
 app.add_middleware(
@@ -122,11 +132,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global variable to track MQTT connection state
+# Global variables for state
 mqtt_connected = False
 mqtt_last_error = None
 mqtt_message_count = 0
 actual_devices = {}
+zones = {}  # Store zones information
+
+# Global session token
+session_token = None
 
 def load_devices_config() -> Dict:
     """Load devices from config file, create with demo devices if doesn't exist."""
@@ -166,8 +180,13 @@ def on_mqtt_connect(client, userdata, flags, rc):
         logger.info("Connected to MQTT broker successfully")
         mqtt_connected = True
         mqtt_last_error = None
-        client.subscribe([(MQTT_TOPIC, 1), (MQTT_REQUEST_TOPIC, 1)])
-        logger.info(f"Subscribed to topics: {MQTT_TOPIC}, {MQTT_REQUEST_TOPIC}")
+        # Subscribe to both device and zone topics
+        client.subscribe([
+            (MQTT_TOPIC, 1),
+            (MQTT_REQUEST_TOPIC, 1),
+            ("homey/zone/#", 1)  # Add subscription for zones
+        ])
+        logger.info(f"Subscribed to topics: {MQTT_TOPIC}, {MQTT_REQUEST_TOPIC}, homey/zone/#")
     else:
         error_msg = f"Failed to connect to MQTT broker: {connection_codes.get(rc, f'Unknown error {rc}')}"
         logger.error(error_msg)
@@ -183,12 +202,10 @@ def on_mqtt_disconnect(client, userdata, rc):
 
 def on_mqtt_message(client, userdata, msg):
     """Callback when an MQTT message is received."""
-    global mqtt_message_count, actual_devices
+    global mqtt_message_count, actual_devices, zones
     try:
         mqtt_message_count += 1
-        logger.debug(f"Received MQTT message #{mqtt_message_count} on topic: {msg.topic}")
         
-        # Parse device information from topic
         if msg.topic.startswith("homey/devices/"):
             parts = msg.topic.split("/")
             if len(parts) >= 4:
@@ -199,32 +216,51 @@ def on_mqtt_message(client, userdata, msg):
                         "id": device_id,
                         "name": "",
                         "type": "",
-                        "capabilities": [],  # Initialize as empty array
-                        "state": {}
+                        "deviceType": "",
+                        "capabilities": [],
+                        "icon": "",
+                        "state": {},
+                        "zone_id": None
                     }
                 
-                # Update device information based on topic type
-                if "name" in msg.topic:
-                    actual_devices[device_id]["name"] = msg.payload.decode().strip('"')
-                elif "type" in msg.topic:
-                    raw_type = msg.payload.decode().strip('"')
-                    # Map the raw type to a user-friendly name, or use the raw type if no mapping exists
-                    actual_devices[device_id]["type"] = DEVICE_TYPE_MAPPING.get(raw_type, raw_type)
-                elif "capabilities" in msg.topic:
-                    # Extract capability name from topic
-                    capability_parts = msg.topic.split("/")
-                    if len(capability_parts) >= 5:
-                        capability_name = capability_parts[4]
-                        if capability_name not in actual_devices[device_id]["capabilities"]:
-                            actual_devices[device_id]["capabilities"].append(capability_name)
-                elif "state" in msg.topic:
-                    try:
-                        state = json.loads(msg.payload.decode())
-                        actual_devices[device_id]["state"].update(state)
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to parse state: {msg.payload.decode()}")
+                if len(parts) == 4:
+                    if parts[3] == "name":
+                        actual_devices[device_id]["name"] = msg.payload.decode().strip('"')
+                    elif parts[3] == "zone":
+                        zone_id = msg.payload.decode().strip('"')
+                        actual_devices[device_id]["zone_id"] = zone_id
+                    elif parts[3] == "icon":
+                        actual_devices[device_id]["icon"] = msg.payload.decode().strip('"')
+                    elif parts[3] == "class":  # Handle class updates
+                        device_class = msg.payload.decode().strip('"')
+                        actual_devices[device_id]["type"] = device_class
+                        # Update icon if not set
+                        if not actual_devices[device_id]["icon"]:
+                            actual_devices[device_id]["icon"] = device_class
+                    elif parts[3] == "type":  # Handle type updates
+                        actual_devices[device_id]["deviceType"] = msg.payload.decode().strip('"')
                 
-                logger.info(f"Updated device {device_id}: {actual_devices[device_id]}")
+                elif len(parts) >= 6 and parts[3] == "capabilities":
+                    capability = parts[4]
+                    property_name = parts[5]
+                    
+                    if capability not in actual_devices[device_id]["capabilities"]:
+                        actual_devices[device_id]["capabilities"].append(capability)
+                    
+                    if property_name == "value":
+                        try:
+                            value = msg.payload.decode().strip('"')
+                            if value.lower() == "true":
+                                actual_devices[device_id]["state"][capability] = True
+                            elif value.lower() == "false":
+                                actual_devices[device_id]["state"][capability] = False
+                            else:
+                                try:
+                                    actual_devices[device_id]["state"][capability] = float(value)
+                                except ValueError:
+                                    actual_devices[device_id]["state"][capability] = value
+                        except Exception as e:
+                            logger.error(f"Error processing value for {capability}: {e}")
                 
     except Exception as e:
         logger.error(f"Error processing MQTT message: {e}")
@@ -248,16 +284,100 @@ except Exception as e:
     logger.error(f"Failed to connect to MQTT broker: {e}")
     mqtt_last_error = str(e)
 
+async def fetch_zones():
+    """Fetch zones from Homey API."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with async_timeout.timeout(10):
+                headers = {
+                    "Authorization": f"Bearer {HOMEY_API_KEY}",
+                    "Accept": "application/json"
+                }
+                async with session.get(HOMEY_API_ZONES, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        zones.clear()
+                        for zone_id, zone_data in data.items():
+                            zones[zone_id] = {
+                                "id": zone_id,
+                                "name": zone_data["name"],
+                                "devices": []
+                            }
+                        logger.info(f"Fetched {len(zones)} zones")
+                    else:
+                        response_text = await response.text()
+                        logger.error(f"Failed to fetch zones: {response.status}")
+    except Exception as e:
+        logger.error(f"Error fetching zones: {str(e)}")
+
+async def fetch_devices():
+    """Fetch devices from Homey API."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with async_timeout.timeout(10):
+                headers = {
+                    "Authorization": f"Bearer {HOMEY_API_KEY}",
+                    "Accept": "application/json"
+                }
+                async with session.get(HOMEY_API_DEVICES, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        for zone in zones.values():
+                            zone["devices"] = []
+                        
+                        for device_id, device_data in data.items():
+                            device_class = device_data.get("class", "")
+                            device_type = device_data.get("type", "")
+                            
+                            if device_id not in actual_devices:
+                                actual_devices[device_id] = {
+                                    "id": device_id,
+                                    "name": device_data["name"],
+                                    "type": device_class,  # Use class as primary type
+                                    "deviceType": device_type,  # Store original type
+                                    "zone_id": device_data.get("zone"),
+                                    "capabilities": device_data.get("capabilities", []),
+                                    "icon": device_data.get("icon", device_class),  # Fallback to class if no icon
+                                    "iconObj": device_data.get("iconObj", {}),
+                                    "uiIndicator": device_data.get("uiIndicator", ""),
+                                    "state": {}
+                                }
+                            else:
+                                actual_devices[device_id].update({
+                                    "name": device_data["name"],
+                                    "type": device_class,  # Use class as primary type
+                                    "deviceType": device_type,  # Store original type
+                                    "zone_id": device_data.get("zone"),
+                                    "capabilities": device_data.get("capabilities", []),
+                                    "icon": device_data.get("icon", device_class),  # Fallback to class if no icon
+                                    "iconObj": device_data.get("iconObj", {}),
+                                    "uiIndicator": device_data.get("uiIndicator", "")
+                                })
+                            
+                            zone_id = device_data.get("zone")
+                            if zone_id and zone_id in zones:
+                                if device_id not in zones[zone_id]["devices"]:
+                                    zones[zone_id]["devices"].append(device_id)
+                        
+                        logger.info(f"Fetched {len(data)} devices")
+                    else:
+                        logger.error(f"Failed to fetch devices: {response.status}")
+    except Exception as e:
+        logger.error(f"Error fetching devices: {str(e)}")
+
 @app.get("/devices")
 async def get_devices():
-    """Get all devices (both demo and actual)."""
+    """Get all devices grouped by zones."""
     config = load_devices_config()
     demo_devices = config.get("demo_devices", [])
     
-    # Only show demo devices if there are no actual devices or MQTT is not connected
     if not mqtt_connected or len(actual_devices) == 0:
         return {
-            "devices": demo_devices,
+            "zones": [{
+                "id": "demo",
+                "name": "Demo Zone",
+                "devices": demo_devices
+            }],
             "status": {
                 "mqtt_connected": mqtt_connected,
                 "mqtt_messages_received": mqtt_message_count,
@@ -270,9 +390,48 @@ async def get_devices():
             ]
         }
     
-    # Return only actual devices when MQTT is connected and devices are found
+    zones_with_devices = []
+    other_zone = {
+        "id": "other",
+        "name": "Overig",
+        "devices": []
+    }
+    
+    for device_id, device in actual_devices.items():
+        device_data = {
+            "id": device["id"],
+            "name": device["name"],
+            "type": device["type"],
+            "deviceType": device.get("deviceType", ""),
+            "capabilities": device["capabilities"],
+            "state": device["state"],
+            "zone_id": device["zone_id"],
+            "icon": device.get("icon", device["type"]),  # Fallback to type if no icon
+            "iconObj": device.get("iconObj", {}),
+            "uiIndicator": device.get("uiIndicator", "")
+        }
+        
+        if device["zone_id"] and device["zone_id"] in zones:
+            zone_exists = False
+            for zone in zones_with_devices:
+                if zone["id"] == device["zone_id"]:
+                    zone["devices"].append(device_data)
+                    zone_exists = True
+                    break
+            if not zone_exists:
+                zones_with_devices.append({
+                    "id": device["zone_id"],
+                    "name": zones[device["zone_id"]]["name"],
+                    "devices": [device_data]
+                })
+        else:
+            other_zone["devices"].append(device_data)
+    
+    if other_zone["devices"]:
+        zones_with_devices.append(other_zone)
+    
     return {
-        "devices": list(actual_devices.values()),
+        "zones": zones_with_devices,
         "status": {
             "mqtt_connected": mqtt_connected,
             "mqtt_messages_received": mqtt_message_count,
@@ -284,24 +443,40 @@ async def get_devices():
 
 @app.post("/devices/refresh")
 async def refresh_devices():
-    """Trigger a refresh of devices via MQTT."""
+    """Trigger a refresh of devices and zones."""
     try:
         if not mqtt_connected:
             raise HTTPException(
                 status_code=503,
                 detail="Geen verbinding met MQTT broker"
             )
-            
-        # Publish a request for devices update
+        
+        # Fetch zones and devices from API
+        await fetch_zones()
+        await fetch_devices()
+        
+        # Request MQTT updates
         mqtt_client.publish(
             MQTT_REQUEST_TOPIC,
-            json.dumps({"action": "refresh", "timestamp": datetime.now().isoformat()}),
+            json.dumps({
+                "action": "refresh",
+                "timestamp": datetime.now().isoformat()
+            }),
             qos=1
         )
-        return {"status": "success", "message": "Device refresh requested"}
+        
+        return {"status": "success", "message": "Device en zone refresh aangevraagd"}
     except Exception as e:
         logger.error(f"Error refreshing devices: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize by fetching zones and devices on startup."""
+    logger.info("Starting up backend, fetching initial data...")
+    await fetch_zones()
+    await fetch_devices()
+    logger.info("Startup complete")
 
 # Cleanup MQTT client on shutdown
 @app.on_event("shutdown")
