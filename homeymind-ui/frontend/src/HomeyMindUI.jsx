@@ -29,7 +29,7 @@ const MessageGroup = ({ messages, isLoading }) => {
   // User message
   if (mainMessage.sender === 'user') {
     return (
-      <Card className="mb-4 bg-blue-100 text-gray-900">
+      <Card className="mb-4 bg-blue-900/30 text-white">
         <CardContent className="flex flex-col gap-2 p-4">
           <div className="flex items-center gap-2">
             <span role="img" aria-label={mainMessage.role} className="text-xl">
@@ -38,13 +38,13 @@ const MessageGroup = ({ messages, isLoading }) => {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 {mainMessage.timestamp && (
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-gray-400">
                     {mainMessage.timestamp}
                   </span>
                 )}
-                <p className="font-semibold text-sm text-gray-900">Jij</p>
+                <p className="font-semibold text-sm text-gray-300">Jij</p>
               </div>
-              <p className="whitespace-pre-wrap text-gray-900">{mainMessage.message}</p>
+              <p className="whitespace-pre-wrap text-white">{mainMessage.message}</p>
             </div>
           </div>
         </CardContent>
@@ -55,7 +55,7 @@ const MessageGroup = ({ messages, isLoading }) => {
   // Agent response with thinking process
   return (
     <div className="mb-4">
-      <Card className={isLoading ? "bg-gray-100 border border-gray-300 text-gray-900" : "bg-white text-gray-900"}>
+      <Card className={isLoading ? "bg-gray-800/50 border-gray-700 text-white" : "bg-gray-800 text-white"}>
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-2">
             <span role="img" aria-label={isLoading ? "thinking" : "agent"} className="text-xl">
@@ -69,7 +69,7 @@ const MessageGroup = ({ messages, isLoading }) => {
                       {finalResponse.timestamp}
                     </span>
                   )}
-                  <p className="font-semibold text-sm text-gray-600">
+                  <p className="font-semibold text-sm text-gray-300">
                     {isLoading ? "Denkproces" : "Antwoord"}
                   </p>
                 </div>
@@ -78,7 +78,7 @@ const MessageGroup = ({ messages, isLoading }) => {
                     variant="ghost"
                     size="sm"
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="text-gray-500 flex items-center gap-2 hover:bg-gray-100"
+                    className="text-gray-400 flex items-center gap-2 hover:bg-gray-700"
                   >
                     <span className="text-lg">{isExpanded ? '▼' : '▶'}</span>
                     {isExpanded ? "Verberg denkproces" : "Toon denkproces"}
@@ -90,8 +90,8 @@ const MessageGroup = ({ messages, isLoading }) => {
 
           {/* Loading indicator */}
           {isLoading && (
-            <div className="flex items-center gap-2 text-gray-500 ml-8">
-              <div className="animate-spin h-4 w-4 border-2 border-gray-500 rounded-full border-t-transparent"></div>
+            <div className="flex items-center gap-2 text-gray-400 ml-8">
+              <div className="animate-spin h-4 w-4 border-2 border-gray-400 rounded-full border-t-transparent"></div>
               <span className="text-sm">Verwerken...</span>
             </div>
           )}
@@ -112,11 +112,11 @@ const MessageGroup = ({ messages, isLoading }) => {
                             {msg.timestamp}
                           </span>
                         )}
-                        <p className="text-xs text-gray-600">
+                        <p className="text-xs text-gray-400">
                           {msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}
                         </p>
                       </div>
-                      <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      <p className="text-sm whitespace-pre-wrap text-gray-300">{msg.message}</p>
                     </div>
                   </div>
                 </div>
@@ -126,13 +126,13 @@ const MessageGroup = ({ messages, isLoading }) => {
 
           {/* Divider line */}
           {isExpanded && agentMessages.length > 0 && finalResponse && (
-            <div className="my-4 border-t border-gray-200"></div>
+            <div className="my-4 border-t border-gray-700"></div>
           )}
 
           {/* Final response */}
           {finalResponse && !isLoading && (
             <div className="ml-8">
-              <p className="whitespace-pre-wrap">{finalResponse.message}</p>
+              <p className="whitespace-pre-wrap text-white">{finalResponse.message}</p>
             </div>
           )}
         </CardContent>
@@ -142,59 +142,33 @@ const MessageGroup = ({ messages, isLoading }) => {
 };
 
 export default function HomeyMindUI() {
-  const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [devices, setDevices] = useState([]);
-  const [isRefreshingDevices, setIsRefreshingDevices] = useState(false);
   const [lastFetched, setLastFetched] = useState(null);
-  const [error, setError] = useState(null);
+  const [showDevices, setShowDevices] = useState(true);
+  const [devicesPanelWidth, setDevicesPanelWidth] = useState(320);
+  const [isResizing, setIsResizing] = useState(false);
   const messagesEndRef = useRef(null);
   const eventSourceRef = useRef(null);
+  const lastPanelWidth = useRef(devicesPanelWidth);
 
+  // Fetch devices
   const fetchDevices = useCallback(async () => {
     try {
-      setIsRefreshingDevices(true);
       const response = await fetch('http://localhost:8000/devices');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
       const data = await response.json();
-      console.log('Fetched devices data:', data); // Debug log for entire response
-      if (Array.isArray(data.devices)) {
+      if (data.devices) {
         setDevices(data.devices);
-        // Set the current time as the last fetched time
-        const now = new Date();
-        setLastFetched(now.toLocaleTimeString('nl-NL', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          second: '2-digit'
-        }));
-      } else {
-        console.error('Devices data is not an array:', data);
-        setDevices([]);
-      }
-      // Handle error or warning from backend
-      if (data.error) {
-        console.log('Error data received:', data.error); // Debug log for error
-        if (typeof data.error === 'object' && data.error.message) {
-          console.log('Setting error message:', data.error.message); // Debug log for message
-          setError(data.error.message);
-        } else {
-          console.log('Setting error string:', data.error); // Debug log for string error
-          setError(data.error);
-        }
+        setLastFetched(new Date().toLocaleTimeString());
       }
     } catch (error) {
       console.error('Error fetching devices:', error);
-      setDevices([]);
-      setError('Kon geen verbinding maken met de server');
-    } finally {
-      setIsRefreshingDevices(false);
     }
   }, []);
 
-  // Fetch devices on component mount
+  // Initial fetch
   useEffect(() => {
     fetchDevices();
   }, [fetchDevices]);
@@ -345,43 +319,86 @@ export default function HomeyMindUI() {
     }
   }, []);
 
-  return (
-    <div className="flex h-screen bg-gray-900 text-white p-4 gap-4">
-      {/* Watermark Logo */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-5 pointer-events-none">
-        <div className="flex items-center gap-4 transform scale-150">
-          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 transform translate-x-2"></div>
-          </div>
-          <div className="text-6xl font-bold tracking-wider text-white">HomeyMind</div>
-        </div>
-      </div>
+  // Handle resize functionality
+  const handleResizeMouseDown = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+    
+    // Store initial mouse position and panel width
+    const startX = e.clientX;
+    const startWidth = devicesPanelWidth;
+    
+    const handleMouseMove = (moveEvent) => {
+      // Calculate delta and apply it to the starting width
+      const delta = startX - moveEvent.clientX;
+      const newWidth = Math.min(Math.max(250, startWidth + delta), 600);
+      setDevicesPanelWidth(newWidth);
+      lastPanelWidth.current = newWidth;
+    };
 
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    // Add listeners immediately on mouse down
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [devicesPanelWidth]);
+
+  // Toggle devices panel with width memory
+  const toggleDevicesPanel = useCallback(() => {
+    if (!showDevices) {
+      const savedWidth = lastPanelWidth.current;
+      const validWidth = Math.min(Math.max(250, savedWidth), 600);
+      setDevicesPanelWidth(validWidth);
+      lastPanelWidth.current = validWidth;
+    }
+    setShowDevices(!showDevices);
+  }, [showDevices]);
+
+  // Initialize lastPanelWidth on mount
+  useEffect(() => {
+    lastPanelWidth.current = devicesPanelWidth;
+  }, []);
+
+  return (
+    <div className="flex h-screen bg-[#0f1218]">
       {/* Main chat area */}
       <div className="flex-1 flex flex-col relative">
-        {/* Error Notification */}
-        {error && (
-          <Notification
-            message={error}
-            onClose={() => setError(null)}
-            type="error"
-          />
-        )}
+        {/* Watermark Logo */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-[0.02] pointer-events-none overflow-hidden">
+          <div className="flex items-center gap-4 transform scale-150">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 transform translate-x-2"></div>
+            </div>
+            <div className="text-6xl font-bold tracking-wider text-white">HomeyMind</div>
+          </div>
+        </div>
 
-        {/* Clear Session Button */}
-        <div className="flex justify-end mb-4">
-          <Button
-            variant="outline"
-            onClick={clearSession}
-            className="text-white border-gray-700 hover:bg-gray-800"
-            disabled={isLoading || messages.length === 0}
-          >
-            🗑️ Wis Sessie
-          </Button>
+        {/* Chat header */}
+        <div className="p-4 border-b border-gray-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setMessages([])} 
+              className="text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded hover:bg-gray-800"
+            >
+              <span className="text-lg">🗑</span> Wis Sessie
+            </button>
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={toggleDevicesPanel}
+              className="text-gray-400 hover:text-white flex items-center gap-2 px-3 py-1.5 rounded hover:bg-gray-800"
+            >
+              <span>🔌</span> {showDevices ? 'Verberg' : 'Toon'} Apparaten
+            </button>
+          </div>
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto mb-4">
+        <div className="flex-1 overflow-y-auto p-4" ref={messagesEndRef}>
           {groupedMessages.map((group, index) => (
             <MessageGroup
               key={index}
@@ -389,35 +406,52 @@ export default function HomeyMindUI() {
               isLoading={isLoading && index === groupedMessages.length - 1}
             />
           ))}
-          <div ref={messagesEndRef} />
         </div>
-
+        
         {/* Input area */}
-        <div className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-            placeholder="Type een bericht..."
-            className="flex-1 bg-gray-800 text-white border-gray-700"
-            disabled={isLoading}
-          />
-          <Button
-            onClick={sendMessage}
-            className="bg-blue-600 text-white hover:bg-blue-700"
-            disabled={isLoading || !input.trim()}
-          >
-            Verstuur
-          </Button>
+        <div className="p-4 border-t border-gray-800">
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              placeholder="Type je bericht..."
+              className="flex-1 bg-gray-800/50 text-white border-gray-700 focus:border-blue-500"
+            />
+            <Button 
+              onClick={sendMessage} 
+              disabled={isLoading || !input.trim()}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+            >
+              Verstuur
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Devices Panel */}
-      <DevicesPanel 
-        devices={devices} 
-        onRefresh={fetchDevices}
-        lastFetched={lastFetched}
-      />
+      {/* Resize handle */}
+      {showDevices && (
+        <div
+          className={`w-1 hover:bg-blue-500 cursor-col-resize transition-colors ${
+            isResizing ? 'bg-blue-500' : 'bg-gray-700'
+          }`}
+          onMouseDown={handleResizeMouseDown}
+        />
+      )}
+
+      {/* Devices panel */}
+      {showDevices && (
+        <div 
+          style={{ width: `${devicesPanelWidth}px` }} 
+          className="border-l border-gray-800 transition-all duration-75 ease-in-out"
+        >
+          <DevicesPanel
+            devices={devices}
+            onRefresh={fetchDevices}
+            lastFetched={lastFetched}
+          />
+        </div>
+      )}
     </div>
   );
 } 

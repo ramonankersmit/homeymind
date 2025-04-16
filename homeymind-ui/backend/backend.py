@@ -109,7 +109,7 @@ async def stream_chat(request: Request, message: str):
     return EventSourceResponse(event_generator())
 
 def load_config():
-    with open("config.yaml", "r") as f:
+    with open(os.path.join(os.path.dirname(__file__), "../../config.yaml"), "r") as f:
         return yaml.safe_load(f)
 
 @app.get("/devices")
