@@ -34,7 +34,7 @@ app.add_middleware(
 
 # Initialize AutoGen manager
 try:
-    with open("config.yaml", "r") as f:
+    with open(os.path.join(os.path.dirname(__file__), "../../config.yaml"), "r") as f:
         config = yaml.safe_load(f)
     autogen_manager = AutoGenManager(config)
 except Exception as e:
