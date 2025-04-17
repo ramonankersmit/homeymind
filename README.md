@@ -219,6 +219,9 @@ homeymind/
 │   │   └── memory.py        # Persistent storage
 │   └── agents/          # Agent implementaties
 │       ├── base_agent.py    # Basis agent klasse
+│       ├── sensor_agent.py  # Sensor data verwerking
+│       ├── tts_agent.py     # Text-to-speech verwerking
+│       ├── light_agent.py   # Licht aansturing
 │       ├── homey_assistant.py  # Hoofdassistent
 │       ├── device_controller.py # Apparaat aansturing
 │       ├── intent_parser.py    # Intent herkenning
@@ -260,14 +263,17 @@ graph TD
     end
 
     subgraph Agents["Agent System"]
-        HA["HomeyAssistant<br>Hoofdassistent"]
+        SA["SensorAgent<br>Sensor data verwerking"]
         IP["IntentParser<br>Commando interpretatie"]
+        HA["HomeyAssistant<br>Hoofdassistent"]
+        TA["TTSAgent<br>Text-to-speech"]
+        LA["LightAgent<br>Licht aansturing"]
         DC["DeviceController<br>Apparaat aansturing"]
     end
 
     subgraph Homey["Homey Integratie"]
         HC["Homey Controller<br>MQTT communicatie"]
-        Devices["Homey Devices<br>Lampen, thermostaat, etc"]
+        Devices["Homey Devices<br>Lampen, sensoren, etc"]
         TTS["Text-to-Speech<br>Homey feedback"]
     end
 
@@ -284,8 +290,11 @@ graph TD
     %% Agent Flow
     API --> AGM
     AGM --> |1 - Parse Intent| IP
-    AGM --> |2 - Process Request| HA
-    AGM --> |3 - Execute Action| DC
+    AGM --> |2 - Get Sensor Data| SA
+    AGM --> |3 - Process Request| HA
+    AGM --> |4 - Execute TTS| TA
+    AGM --> |5 - Control Lights| LA
+    AGM --> |6 - Execute Action| DC
 
     %% Homey Integration
     DC --> HC
@@ -294,34 +303,12 @@ graph TD
 
     %% Real-time Updates
     IP --> |Real-time updates| AGM
+    SA --> |Real-time updates| AGM
     HA --> |Real-time updates| AGM
+    TA --> |Real-time updates| AGM
+    LA --> |Real-time updates| AGM
     DC --> |Real-time updates| AGM
     AGM --> |SSE Events| API
     API --> SSE
     SSE --> UI
 ```
-
-## Roadmap
-
-### Versie 1.0 (Huidig)
-✅ Basis chat interface<br>
-✅ LLM integratie (Ollama & OpenAI)<br>
-✅ Homey MQTT integratie<br>
-✅ Real-time streaming responses<br>
-✅ Multi-agent systeem<br>
-✅ CLI voice interactie met Vosk
-
-### Versie 1.1 (Gepland)
-🔄 Voice integratie in web interface<br>
-🔄 Verbeterde agent communicatie<br>
-🔄 Uitgebreide apparaat ondersteuning
-
-### Toekomstige Features
-* 📋 Geschiedenis van gesprekken
-* 🎯 Contextbewuste responses
-* 🔒 Authenticatie en gebruikersbeheer
-* 📱 Progressive Web App (PWA)
-* 🌐 Meertalige ondersteuning
-* 📊 Gebruiksstatistieken en analyses
-
-
