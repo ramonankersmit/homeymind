@@ -9,8 +9,7 @@ import autogen
 from autogen import AssistantAgent, UserProxyAgent
 import logging
 from datetime import datetime
-from homey.mqtt_client import MQTTClient
-
+from homey.mqtt_client import HomeyMQTTClient
 
 def create_user_proxy() -> UserProxyAgent:
     """Create a user proxy agent with Docker disabled."""

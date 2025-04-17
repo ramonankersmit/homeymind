@@ -14,8 +14,7 @@ from .sensor_agent import SensorAgent
 from .homey_assistant import HomeyAssistant
 from .tts_agent import TTSAgent
 from .device_controller import DeviceController
-from homey.mqtt import HomeyMQTTClient
-
+from homey.mqtt_client import HomeyMQTTClient
 
 class AutoGenManager:
     """Manager class for coordinating all agents in the HomeyMind system."""
