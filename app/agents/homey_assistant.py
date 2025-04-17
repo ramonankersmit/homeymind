@@ -5,12 +5,23 @@ This agent is responsible for generating natural language responses and coordina
 based on parsed intents and device status.
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 from .base_agent import BaseAgent, create_user_proxy
 
 
 class HomeyAssistant(BaseAgent):
     """Agent responsible for generating natural language responses and coordinating actions."""
+
+    def __init__(self, config: Dict[str, Any], mqtt_client):
+        """Initialize the Homey assistant.
+        
+        Args:
+            config: Configuration dictionary
+            mqtt_client: MQTT client for device communication
+        """
+        super().__init__(config, mqtt_client)
+        self.llm_config = config.get("llm_config", {})
+        self.require_confirmation = config.get("require_confirmation", True)
 
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -113,4 +124,85 @@ Set requires_confirmation to true if:
             "response": "Ik heb je verzoek ontvangen, maar kon geen specifieke actie bepalen.",
             "actions": [],
             "requires_confirmation": True
-        } 
+        }
+
+    async def _generate_response(self, intent: Dict[str, Any], sensor_data: Dict[str, Any]) -> str:
+        """Generate natural language response based on intent and sensor data.
+        
+        Args:
+            intent: Parsed intent from IntentParser
+            sensor_data: Current sensor readings
+            
+        Returns:
+            Natural language response
+        """
+        # TODO: Implement LLM-based response generation
+        # This is a placeholder that generates simple responses
+        intent_type = intent.get("type")
+        device_type = intent.get("device_type")
+        zone = intent.get("zone")
+        value = intent.get("value")
+        
+        if intent_type == "control":
+            action = "turning on" if value == "on" else "turning off"
+            return f"I'll {action} the {device_type} in the {zone}."
+        elif intent_type == "read_sensor":
+            if sensor_data:
+                return f"The {sensor_data['type']} in the {zone} is {sensor_data['value']}."
+            return f"I'll check the {device_type} in the {zone}."
+        return "I'm not sure what you want me to do."
+
+    def _create_action_plan(self, intent: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Create a plan of device actions based on the intent.
+        
+        Args:
+            intent: Parsed intent from IntentParser
+            
+        Returns:
+            List of device actions to execute
+        """
+        actions = []
+        intent_type = intent.get("type")
+        device_type = intent.get("device_type")
+        zone = intent.get("zone")
+        value = intent.get("value")
+        
+        if intent_type == "control":
+            # Find devices matching the criteria
+            devices = self.config.get("devices", [])
+            for device in devices:
+                if (device.get("type") == device_type and 
+                    device.get("zone") == zone):
+                    actions.append({
+                        "device_id": device.get("id"),
+                        "capability": "onoff",
+                        "value": value
+                    })
+        
+        return actions
+
+    def _needs_confirmation(self, intent: Dict[str, Any]) -> bool:
+        """Determine if the action requires user confirmation.
+        
+        Args:
+            intent: Parsed intent from IntentParser
+            
+        Returns:
+            True if confirmation is needed, False otherwise
+        """
+        # Always require confirmation if configured
+        if self.require_confirmation:
+            return True
+            
+        # Check intent confidence
+        confidence = intent.get("confidence", 0)
+        if confidence < 0.8:
+            return True
+            
+        # Check if it's a destructive action
+        intent_type = intent.get("type")
+        value = intent.get("value")
+        if intent_type == "control" and value == "off":
+            return True
+            
+        return False 

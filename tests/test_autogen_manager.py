@@ -1,111 +1,116 @@
-"""Tests for the AutoGenManager class."""
+"""Tests for the AutoGenManager."""
 
 import pytest
-import asyncio
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from app.agents.autogen_manager import AutoGenManager
 
 
 @pytest.fixture
 def mock_config():
-    """Create a mock configuration dictionary."""
+    """Create a mock configuration."""
     return {
-        "llm_config": {
-            "config_list": [{"model": "test-model"}],
-            "temperature": 0.7
-        },
         "mqtt_config": {
             "host": "localhost",
             "port": 1883
         },
         "tts_config": {
-            "default_zone": "woonkamer",
-            "default_volume": 50
-        }
+            "voice": "nl-NL-Standard-A",
+            "audio_device": "default"
+        },
+        "llm_config": {},
+        "require_confirmation": True
     }
-
-
-@pytest.fixture
-def mock_mqtt_client():
-    """Create a mock MQTT client."""
-    client = Mock()
-    client.connect = Mock()
-    client.disconnect = Mock()
-    return client
 
 
 @pytest.fixture
 def mock_agents():
     """Create mock agent instances."""
     return {
-        "sensor": Mock(),
-        "intent_parser": Mock(),
-        "assistant": Mock(),
-        "tts": Mock(),
-        "device_controller": Mock()
+        "intent_parser": AsyncMock(),
+        "sensor_agent": AsyncMock(),
+        "homey_assistant": AsyncMock(),
+        "tts_agent": AsyncMock(),
+        "device_controller": AsyncMock()
     }
 
 
 @pytest.fixture
-def autogen_manager(mock_config, mock_mqtt_client, mock_agents):
-    """Create an AutoGenManager instance with mocked dependencies."""
+def mock_mqtt_client():
+    """Create a mock MQTT client."""
+    client = AsyncMock()
+    client.connect = AsyncMock()
+    client.disconnect = AsyncMock()
+    return client
+
+
+@pytest.fixture
+def autogen_manager(mock_config, mock_agents, mock_mqtt_client):
+    """Create an AutoGenManager instance with mock dependencies."""
     with patch("app.agents.autogen_manager.HomeyMQTTClient", return_value=mock_mqtt_client), \
-         patch("app.agents.autogen_manager.SensorAgent", return_value=mock_agents["sensor"]), \
          patch("app.agents.autogen_manager.IntentParser", return_value=mock_agents["intent_parser"]), \
-         patch("app.agents.autogen_manager.HomeyAssistant", return_value=mock_agents["assistant"]), \
-         patch("app.agents.autogen_manager.TTSAgent", return_value=mock_agents["tts"]), \
+         patch("app.agents.autogen_manager.SensorAgent", return_value=mock_agents["sensor_agent"]), \
+         patch("app.agents.autogen_manager.HomeyAssistant", return_value=mock_agents["homey_assistant"]), \
+         patch("app.agents.autogen_manager.TTSAgent", return_value=mock_agents["tts_agent"]), \
          patch("app.agents.autogen_manager.DeviceController", return_value=mock_agents["device_controller"]):
-        manager = AutoGenManager(mock_config)
-        return manager
+        return AutoGenManager(mock_config)
 
 
 @pytest.mark.asyncio
-async def test_initialization(autogen_manager, mock_config, mock_mqtt_client):
-    """Test that the manager initializes correctly."""
-    assert autogen_manager.config == mock_config
+async def test_initialization(autogen_manager, mock_mqtt_client, mock_agents):
+    """Test proper initialization of manager and agents."""
+    # Verify MQTT client initialization
+    mock_mqtt_client.connect.assert_called_once()
+    
+    # Verify agent initialization
     assert autogen_manager.mqtt_client == mock_mqtt_client
-    assert mock_mqtt_client.connect.called
+    assert autogen_manager.intent_parser == mock_agents["intent_parser"]
+    assert autogen_manager.sensor_agent == mock_agents["sensor_agent"]
+    assert autogen_manager.homey_assistant == mock_agents["homey_assistant"]
+    assert autogen_manager.tts_agent == mock_agents["tts_agent"]
+    assert autogen_manager.device_controller == mock_agents["device_controller"]
 
 
 @pytest.mark.asyncio
 async def test_process_intent_streaming_success(autogen_manager, mock_agents):
     """Test successful intent processing flow."""
-    # Setup mock responses
+    # Configure mock responses
     mock_agents["intent_parser"].process.return_value = {
+        "status": "success",
         "intent": {
-            "type": "set_brightness",
+            "type": "control",
             "device_type": "light",
             "zone": "woonkamer",
-            "value": 80
-        },
-        "confidence": 0.95
+            "value": "on",
+            "confidence": 0.95
+        }
     }
     
-    mock_agents["assistant"].process.return_value = {
-        "response": "Ik zal de lampen in de woonkamer op 80% zetten.",
-        "actions": [{
-            "device_id": "woonkamer_lamp",
-            "capability": "brightness",
-            "value": 80
-        }],
+    mock_agents["homey_assistant"].process.return_value = {
+        "status": "success",
+        "response": "I'll turn on the light in the woonkamer.",
+        "actions": [
+            {
+                "device_id": "light_1",
+                "capability": "onoff",
+                "value": "on"
+            }
+        ],
         "requires_confirmation": False
     }
     
-    mock_agents["tts"].process.return_value = {"status": "success"}
     mock_agents["device_controller"].process.return_value = {
         "status": "success",
-        "executed_actions": [{
-            "device_id": "woonkamer_lamp",
-            "capability": "brightness",
-            "value": 80,
-            "status": "success"
-        }]
+        "results": [
+            {
+                "device_id": "light_1",
+                "status": "success",
+                "message": "Light turned on"
+            }
+        ]
     }
     
     # Process intent
-    result = await autogen_manager.process_intent_streaming(
-        "Zet de lampen in de woonkamer op 80%"
-    )
+    result = await autogen_manager.process_intent_streaming("Turn on the light in the woonkamer")
     
     # Verify result
     assert result["status"] == "success"
@@ -115,76 +120,77 @@ async def test_process_intent_streaming_success(autogen_manager, mock_agents):
     
     # Verify agent calls
     mock_agents["intent_parser"].process.assert_called_once()
-    mock_agents["assistant"].process.assert_called_once()
-    mock_agents["tts"].process.assert_called_once()
+    mock_agents["homey_assistant"].process.assert_called_once()
     mock_agents["device_controller"].process.assert_called_once()
+    mock_agents["tts_agent"].process.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_process_intent_streaming_sensor_data(autogen_manager, mock_agents):
     """Test intent processing with sensor data retrieval."""
-    # Setup mock responses
+    # Configure mock responses
     mock_agents["intent_parser"].process.return_value = {
+        "status": "success",
         "intent": {
             "type": "read_sensor",
             "device_type": "temperature",
-            "zone": "woonkamer"
-        },
-        "confidence": 0.95
-    }
-    
-    mock_agents["sensor"].process.return_value = {
-        "temperature": {
-            "value": 21.5,
             "zone": "woonkamer",
-            "unit": "°C"
+            "confidence": 0.95
         }
     }
     
-    mock_agents["assistant"].process.return_value = {
-        "response": "De temperatuur in de woonkamer is 21.5°C.",
+    mock_agents["sensor_agent"].process.return_value = {
+        "status": "success",
+        "sensor_data": {
+            "type": "temperature",
+            "zone": "woonkamer",
+            "value": 22.5,
+            "timestamp": "2024-03-20T10:00:00"
+        }
+    }
+    
+    mock_agents["homey_assistant"].process.return_value = {
+        "status": "success",
+        "response": "The temperature in the woonkamer is 22.5°C.",
         "actions": [],
         "requires_confirmation": False
     }
     
     # Process intent
-    result = await autogen_manager.process_intent_streaming(
-        "Wat is de temperatuur in de woonkamer?"
-    )
+    result = await autogen_manager.process_intent_streaming("What's the temperature in the woonkamer?")
     
     # Verify result
     assert result["status"] == "success"
     assert "sensor_data" in result["data"]
-    assert result["data"]["sensor_data"]["temperature"]["value"] == 21.5
+    assert result["data"]["sensor_data"]["value"] == 22.5
     
     # Verify agent calls
-    mock_agents["sensor"].process.assert_called_once()
+    mock_agents["sensor_agent"].process.assert_called_once()
+    mock_agents["device_controller"].process.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_process_intent_streaming_error(autogen_manager, mock_agents):
     """Test error handling during intent processing."""
-    # Setup mock to raise exception
-    mock_agents["intent_parser"].process.side_effect = Exception("Test error")
+    # Configure mock to raise exception
+    mock_agents["intent_parser"].process.side_effect = Exception("Intent parsing failed")
     
     # Process intent
-    result = await autogen_manager.process_intent_streaming(
-        "Zet de lampen aan"
-    )
+    result = await autogen_manager.process_intent_streaming("Invalid input")
     
-    # Verify error handling
+    # Verify error result
     assert result["status"] == "error"
-    assert "error" in result
-    assert result["error"] == "Test error"
+    assert "Failed to process intent" in result["error"]
+    
+    # Verify no further agent calls
+    mock_agents["sensor_agent"].process.assert_not_called()
+    mock_agents["homey_assistant"].process.assert_not_called()
+    mock_agents["device_controller"].process.assert_not_called()
+    mock_agents["tts_agent"].process.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_close(autogen_manager, mock_mqtt_client, mock_agents):
-    """Test cleanup on close."""
+async def test_close(autogen_manager, mock_mqtt_client):
+    """Test proper cleanup of resources."""
     await autogen_manager.close()
-    
-    # Verify cleanup
-    mock_mqtt_client.disconnect.assert_called_once()
-    for agent in mock_agents.values():
-        if hasattr(agent, "close"):
-            agent.close.assert_called_once() 
+    mock_mqtt_client.disconnect.assert_called_once() 

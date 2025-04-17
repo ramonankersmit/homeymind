@@ -18,130 +18,89 @@ from homey.mqtt import HomeyMQTTClient
 
 
 class AutoGenManager:
-    """Manager class for orchestrating agent interactions."""
+    """Manager class for coordinating all agents in the HomeyMind system."""
 
     def __init__(self, config: Dict[str, Any]):
-        """
-        Initialize the AutoGenManager with configuration.
+        """Initialize the manager and all agents.
         
         Args:
-            config (Dict[str, Any]): Configuration dictionary containing:
-                - llm_config: LLM configuration
-                - mqtt_config: MQTT configuration
-                - device_config: Device configuration
-                - tts_config: TTS configuration
+            config: Configuration dictionary containing settings for all components
         """
-        self.config = config
-        self.mqtt_client = HomeyMQTTClient(config.get("mqtt_config", {}))
-        self.agents = {}
-        self._initialize_agents()
-
-    def _initialize_agents(self):
-        """Initialize all agents with their respective configurations."""
-        # Initialize MQTT client first
+        # Initialize MQTT client
+        self.mqtt_client = HomeyMQTTClient(config["mqtt_config"])
         self.mqtt_client.connect()
-        
-        # Initialize agents in the correct order
-        self.agents["sensor"] = SensorAgent(
-            self.config.get("llm_config", {}),
-            self.mqtt_client
-        )
-        
-        self.agents["intent_parser"] = IntentParser(
-            self.config.get("llm_config", {})
-        )
-        
-        self.agents["assistant"] = HomeyAssistant(
-            self.config.get("llm_config", {})
-        )
-        
-        self.agents["tts"] = TTSAgent(
-            self.config.get("llm_config", {}),
-            self.mqtt_client,
-            self.config.get("tts_config", {})
-        )
-        
-        self.agents["device_controller"] = DeviceController(
-            self.config.get("llm_config", {}),
-            self.mqtt_client
-        )
 
-    async def process_intent_streaming(self, message: str) -> Dict[str, Any]:
-        """
-        Process user intent with streaming response.
+        # Initialize all agents
+        self.intent_parser = IntentParser(config, self.mqtt_client)
+        self.sensor_agent = SensorAgent(config, self.mqtt_client)
+        self.homey_assistant = HomeyAssistant(config, self.mqtt_client)
+        self.tts_agent = TTSAgent(config, self.mqtt_client, config["tts_config"])
+        self.device_controller = DeviceController(config, self.mqtt_client)
+
+    async def process_intent_streaming(self, text: str) -> Dict[str, Any]:
+        """Process user input through the agent pipeline.
         
         Args:
-            message (str): User's input message
+            text: User input text to process
             
         Returns:
-            Dict[str, Any]: Processing result with status and data
-                {
-                    "status": "success",
-                    "data": {
-                        "intent": {...},
-                        "sensor_data": {...},
-                        "response": {...},
-                        "actions": {...}
-                    }
-                }
+            Dictionary containing the complete processing results
         """
-        result = {
-            "status": "success",
-            "data": {}
-        }
-        
         try:
             # Step 1: Parse intent
-            intent_result = await self.agents["intent_parser"].process({
-                "message": message
-            })
-            result["data"]["intent"] = intent_result
-            
+            intent_result = await self.intent_parser.process({"message": text})
+            if intent_result["status"] != "success":
+                return intent_result
+
             # Step 2: Get sensor data if needed
-            if intent_result.get("intent", {}).get("type") in ["read_sensor", "set_temperature"]:
-                sensor_result = await self.agents["sensor"].process({
-                    "intent": intent_result["intent"]
-                })
-                result["data"]["sensor_data"] = sensor_result
-            
-            # Step 3: Generate response and actions
-            assistant_result = await self.agents["assistant"].process({
+            sensor_data = {}
+            if intent_result["intent"]["type"] == "read_sensor":
+                sensor_data = await self.sensor_agent.process(intent_result["intent"])
+
+            # Step 3: Generate response and action plan
+            assistant_result = await self.homey_assistant.process({
                 "intent": intent_result["intent"],
-                "confidence": intent_result["confidence"],
-                "raw_input": message,
-                "device_status": result["data"].get("sensor_data", {})
+                "sensor_data": sensor_data
             })
-            result["data"]["response"] = assistant_result
-            
-            # Step 4: Handle TTS if needed
-            if assistant_result.get("response"):
-                tts_result = await self.agents["tts"].process({
+            if assistant_result["status"] != "success":
+                return assistant_result
+
+            # Step 4: Handle TTS
+            if "response" in assistant_result:
+                await self.tts_agent.process({
                     "text": assistant_result["response"]
                 })
-                result["data"]["tts"] = tts_result
-            
-            # Step 5: Execute device actions if needed
-            if assistant_result.get("actions"):
-                action_result = await self.agents["device_controller"].process({
+
+            # Step 5: Execute device actions
+            if "actions" in assistant_result:
+                action_result = await self.device_controller.process({
                     "actions": assistant_result["actions"],
                     "requires_confirmation": assistant_result.get("requires_confirmation", True)
                 })
-                result["data"]["actions"] = action_result
-            
+                if action_result["status"] != "success":
+                    return action_result
+
+            # Return complete result
+            return {
+                "status": "success",
+                "data": {
+                    "intent": intent_result["intent"],
+                    "sensor_data": sensor_data,
+                    "response": assistant_result["response"],
+                    "actions": assistant_result["actions"]
+                }
+            }
+
         except Exception as e:
-            result["status"] = "error"
-            result["error"] = str(e)
-            self._log_error(f"Error processing intent: {e}")
-        
-        return result
+            return {
+                "status": "error",
+                "error": f"Failed to process intent: {str(e)}"
+            }
 
     def _log_error(self, message: str):
         """Log error message."""
         print(f"ERROR: {message}")
 
     async def close(self):
-        """Close all connections and cleanup."""
+        """Clean up resources."""
         await self.mqtt_client.disconnect()
-        for agent in self.agents.values():
-            if hasattr(agent, "close"):
-                await agent.close()

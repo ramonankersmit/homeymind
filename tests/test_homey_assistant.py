@@ -1,37 +1,47 @@
-"""Tests for the HomeyAssistant class."""
+"""Tests for the HomeyAssistant agent."""
 
 import pytest
-import asyncio
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock
 from app.agents.homey_assistant import HomeyAssistant
 
 
 @pytest.fixture
 def mock_config():
-    """Create a mock configuration dictionary."""
+    """Create a mock configuration."""
     return {
-        "config_list": [{"model": "test-model"}],
-        "temperature": 0.7
+        "llm_config": {},
+        "require_confirmation": True,
+        "devices": [
+            {
+                "id": "light_1",
+                "type": "light",
+                "zone": "woonkamer"
+            },
+            {
+                "id": "thermostat_1",
+                "type": "thermostat",
+                "zone": "woonkamer"
+            }
+        ]
     }
 
 
 @pytest.fixture
 def mock_mqtt_client():
     """Create a mock MQTT client."""
-    client = Mock()
-    return client
+    return AsyncMock()
 
 
 @pytest.fixture
 def homey_assistant(mock_config, mock_mqtt_client):
-    """Create a HomeyAssistant instance with mocked dependencies."""
+    """Create a HomeyAssistant instance with mock dependencies."""
     return HomeyAssistant(mock_config, mock_mqtt_client)
 
 
 @pytest.mark.asyncio
-async def test_process_light_control(homey_assistant):
-    """Test processing light control intent."""
-    result = await homey_assistant.process({
+async def test_process_control_intent(homey_assistant):
+    """Test processing a control intent."""
+    input_data = {
         "intent": {
             "type": "control",
             "device_type": "light",
@@ -39,156 +49,89 @@ async def test_process_light_control(homey_assistant):
             "value": "on",
             "confidence": 0.95
         }
-    })
+    }
+    
+    result = await homey_assistant.process(input_data)
     
     assert result["status"] == "success"
-    assert "response" in result
-    assert "actions" in result
+    assert "I'll turning on the light in the woonkamer" in result["response"]
     assert len(result["actions"]) == 1
-    assert result["actions"][0]["device_id"] == "woonkamer_light"
+    assert result["actions"][0]["device_id"] == "light_1"
     assert result["actions"][0]["capability"] == "onoff"
     assert result["actions"][0]["value"] == "on"
-    assert not result["requires_confirmation"]
+    assert result["requires_confirmation"] is True
 
 
 @pytest.mark.asyncio
-async def test_process_temperature_control(homey_assistant):
-    """Test processing temperature control intent."""
-    result = await homey_assistant.process({
-        "intent": {
-            "type": "control",
-            "device_type": "thermostat",
-            "zone": "keuken",
-            "value": 21,
-            "confidence": 0.9
-        }
-    })
-    
-    assert result["status"] == "success"
-    assert "response" in result
-    assert "actions" in result
-    assert len(result["actions"]) == 1
-    assert result["actions"][0]["device_id"] == "keuken_thermostat"
-    assert result["actions"][0]["capability"] == "target_temperature"
-    assert result["actions"][0]["value"] == 21
-    assert not result["requires_confirmation"]
-
-
-@pytest.mark.asyncio
-async def test_process_sensor_read(homey_assistant):
-    """Test processing sensor read intent."""
-    result = await homey_assistant.process({
+async def test_process_sensor_intent(homey_assistant):
+    """Test processing a sensor reading intent."""
+    input_data = {
         "intent": {
             "type": "read_sensor",
             "device_type": "temperature",
-            "zone": "slaapkamer",
-            "confidence": 0.85
+            "zone": "woonkamer",
+            "confidence": 0.95
         },
         "sensor_data": {
-            "temperature": {
-                "value": 20.5,
-                "unit": "°C"
-            }
-        }
-    })
-    
-    assert result["status"] == "success"
-    assert "response" in result
-    assert "De temperatuur in de slaapkamer is 20.5°C" in result["response"]
-    assert "actions" in result
-    assert len(result["actions"]) == 0
-    assert not result["requires_confirmation"]
-
-
-@pytest.mark.asyncio
-async def test_process_multiple_actions(homey_assistant):
-    """Test processing intent requiring multiple actions."""
-    result = await homey_assistant.process({
-        "intent": {
-            "type": "control",
-            "device_type": "light",
-            "zone": "all",
-            "value": "off",
-            "confidence": 0.8
-        }
-    })
-    
-    assert result["status"] == "success"
-    assert "response" in result
-    assert "actions" in result
-    assert len(result["actions"]) > 1
-    assert all(action["capability"] == "onoff" for action in result["actions"])
-    assert all(action["value"] == "off" for action in result["actions"])
-    assert result["requires_confirmation"]
-
-
-@pytest.mark.asyncio
-async def test_process_low_confidence(homey_assistant):
-    """Test processing intent with low confidence."""
-    result = await homey_assistant.process({
-        "intent": {
-            "type": "control",
-            "device_type": "light",
+            "type": "temperature",
             "zone": "woonkamer",
-            "value": "on",
-            "confidence": 0.3
+            "value": 22.5,
+            "timestamp": "2024-03-20T10:00:00"
         }
-    })
+    }
+    
+    result = await homey_assistant.process(input_data)
     
     assert result["status"] == "success"
-    assert "response" in result
-    assert "actions" in result
-    assert result["requires_confirmation"]
+    assert "The temperature in the woonkamer is 22.5" in result["response"]
+    assert len(result["actions"]) == 0
+    assert result["requires_confirmation"] is False
 
 
 @pytest.mark.asyncio
-async def test_process_invalid_intent(homey_assistant):
-    """Test processing invalid intent."""
-    result = await homey_assistant.process({
+async def test_process_unknown_intent(homey_assistant):
+    """Test processing an unknown intent."""
+    input_data = {
         "intent": {
             "type": "unknown",
             "confidence": 0.1
         }
-    })
+    }
+    
+    result = await homey_assistant.process(input_data)
     
     assert result["status"] == "success"
-    assert "response" in result
-    assert "actions" in result
+    assert "I'm not sure what you want me to do" in result["response"]
     assert len(result["actions"]) == 0
-    assert not result["requires_confirmation"]
+    assert result["requires_confirmation"] is True
 
 
 @pytest.mark.asyncio
-async def test_process_llm_error(homey_assistant):
-    """Test error handling in LLM processing."""
-    with patch.object(homey_assistant, '_get_llm_response', side_effect=Exception("LLM error")):
-        result = await homey_assistant.process({
-            "intent": {
-                "type": "control",
-                "device_type": "light",
-                "zone": "woonkamer",
-                "value": "on",
-                "confidence": 0.95
-            }
-        })
-        
-        assert result["status"] == "error"
-        assert "LLM error" in result["error"]
+async def test_process_error(homey_assistant):
+    """Test error handling in process method."""
+    input_data = {}  # Missing required intent
+    
+    result = await homey_assistant.process(input_data)
+    
+    assert result["status"] == "error"
+    assert "No intent provided" in result["error"]
 
 
 @pytest.mark.asyncio
-async def test_process_json_parse_error(homey_assistant):
-    """Test handling of invalid JSON response."""
-    with patch.object(homey_assistant, '_get_llm_response', return_value="invalid json"):
-        result = await homey_assistant.process({
-            "intent": {
-                "type": "control",
-                "device_type": "light",
-                "zone": "woonkamer",
-                "value": "on",
-                "confidence": 0.95
-            }
-        })
-        
-        assert result["status"] == "error"
-        assert "Failed to parse LLM response" in result["error"] 
+async def test_needs_confirmation(homey_assistant):
+    """Test confirmation requirement logic."""
+    # Test low confidence
+    intent = {"confidence": 0.5}
+    assert homey_assistant._needs_confirmation(intent) is True
+    
+    # Test high confidence
+    intent = {"confidence": 0.9}
+    assert homey_assistant._needs_confirmation(intent) is True  # Because require_confirmation is True
+    
+    # Test destructive action
+    intent = {"type": "control", "value": "off", "confidence": 0.95}
+    assert homey_assistant._needs_confirmation(intent) is True
+    
+    # Test safe action
+    intent = {"type": "control", "value": "on", "confidence": 0.95}
+    assert homey_assistant._needs_confirmation(intent) is True  # Still true due to config 

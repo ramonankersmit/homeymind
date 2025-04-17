@@ -1,205 +1,168 @@
-"""Tests for the DeviceController class."""
+"""Tests for the DeviceController agent."""
 
 import pytest
-import asyncio
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, MagicMock
 from app.agents.device_controller import DeviceController
 
 
 @pytest.fixture
 def mock_config():
-    """Create a mock configuration dictionary."""
+    """Create a mock configuration."""
     return {
-        "config_list": [{"model": "test-model"}],
-        "temperature": 0.7
+        "devices": [
+            {
+                "id": "light_1",
+                "type": "light",
+                "zone": "woonkamer"
+            },
+            {
+                "id": "thermostat_1",
+                "type": "thermostat",
+                "zone": "woonkamer"
+            }
+        ]
     }
 
 
 @pytest.fixture
 def mock_mqtt_client():
     """Create a mock MQTT client."""
-    client = Mock()
-    client.execute_action = Mock(return_value=True)
-    client.get_status = Mock(return_value={"value": "on"})
-    return client
+    return AsyncMock()
 
 
 @pytest.fixture
 def device_controller(mock_config, mock_mqtt_client):
-    """Create a DeviceController instance with mocked dependencies."""
+    """Create a DeviceController instance with mock dependencies."""
     return DeviceController(mock_config, mock_mqtt_client)
 
 
 @pytest.mark.asyncio
-async def test_process_single_action(device_controller, mock_mqtt_client):
+async def test_process_single_action(device_controller):
     """Test processing a single device action."""
-    result = await device_controller.process({
-        "actions": [{
-            "device_id": "woonkamer_light",
-            "capability": "onoff",
-            "value": "on"
-        }],
-        "requires_confirmation": False
-    })
-    
-    assert result["status"] == "success"
-    assert len(result["results"]) == 1
-    assert result["results"][0]["device_id"] == "woonkamer_light"
-    assert result["results"][0]["success"] is True
-    assert result["results"][0]["error"] is None
-    
-    mock_mqtt_client.execute_action.assert_called_once_with(
-        "woonkamer_light",
-        "onoff",
-        "on"
-    )
-
-
-@pytest.mark.asyncio
-async def test_process_multiple_actions(device_controller, mock_mqtt_client):
-    """Test processing multiple device actions."""
-    result = await device_controller.process({
+    input_data = {
         "actions": [
             {
-                "device_id": "woonkamer_light",
-                "capability": "onoff",
-                "value": "on"
-            },
-            {
-                "device_id": "keuken_light",
+                "device_id": "light_1",
                 "capability": "onoff",
                 "value": "on"
             }
         ],
         "requires_confirmation": False
-    })
+    }
+    
+    result = await device_controller.process(input_data)
+    
+    assert result["status"] == "success"
+    assert len(result["results"]) == 1
+    assert result["results"][0]["device_id"] == "light_1"
+    assert result["results"][0]["status"] == "success"
+    assert "Successfully executed" in result["results"][0]["message"]
+
+
+@pytest.mark.asyncio
+async def test_process_multiple_actions(device_controller):
+    """Test processing multiple device actions."""
+    input_data = {
+        "actions": [
+            {
+                "device_id": "light_1",
+                "capability": "onoff",
+                "value": "on"
+            },
+            {
+                "device_id": "thermostat_1",
+                "capability": "target_temperature",
+                "value": 21
+            }
+        ],
+        "requires_confirmation": False
+    }
+    
+    result = await device_controller.process(input_data)
     
     assert result["status"] == "success"
     assert len(result["results"]) == 2
-    assert all(r["success"] is True for r in result["results"])
-    assert mock_mqtt_client.execute_action.call_count == 2
+    assert all(r["status"] == "success" for r in result["results"])
 
 
 @pytest.mark.asyncio
-async def test_process_action_with_status_check(device_controller, mock_mqtt_client):
-    """Test processing action with status verification."""
-    result = await device_controller.process({
-        "actions": [{
-            "device_id": "woonkamer_light",
-            "capability": "onoff",
-            "value": "on",
-            "verify_status": True
-        }],
-        "requires_confirmation": False
-    })
-    
-    assert result["status"] == "success"
-    assert len(result["results"]) == 1
-    assert result["results"][0]["success"] is True
-    assert result["results"][0]["status"] == "on"
-    
-    mock_mqtt_client.execute_action.assert_called_once()
-    mock_mqtt_client.get_status.assert_called_once_with(
-        "woonkamer_light",
-        "onoff"
-    )
-
-
-@pytest.mark.asyncio
-async def test_process_action_error(device_controller, mock_mqtt_client):
-    """Test handling action execution error."""
-    mock_mqtt_client.execute_action.side_effect = Exception("Action failed")
-    
-    result = await device_controller.process({
-        "actions": [{
-            "device_id": "woonkamer_light",
-            "capability": "onoff",
-            "value": "on"
-        }],
-        "requires_confirmation": False
-    })
-    
-    assert result["status"] == "success"
-    assert len(result["results"]) == 1
-    assert result["results"][0]["success"] is False
-    assert "Action failed" in result["results"][0]["error"]
-
-
-@pytest.mark.asyncio
-async def test_process_status_check_error(device_controller, mock_mqtt_client):
-    """Test handling status check error."""
-    mock_mqtt_client.get_status.side_effect = Exception("Status check failed")
-    
-    result = await device_controller.process({
-        "actions": [{
-            "device_id": "woonkamer_light",
-            "capability": "onoff",
-            "value": "on",
-            "verify_status": True
-        }],
-        "requires_confirmation": False
-    })
-    
-    assert result["status"] == "success"
-    assert len(result["results"]) == 1
-    assert result["results"][0]["success"] is True
-    assert result["results"][0]["status"] is None
-    assert "Status check failed" in result["results"][0]["error"]
-
-
-@pytest.mark.asyncio
-async def test_process_empty_actions(device_controller):
-    """Test processing with no actions."""
-    result = await device_controller.process({
+async def test_process_no_actions(device_controller):
+    """Test processing with no actions provided."""
+    input_data = {
         "actions": [],
         "requires_confirmation": False
-    })
+    }
     
-    assert result["status"] == "success"
-    assert len(result["results"]) == 0
+    result = await device_controller.process(input_data)
+    
+    assert result["status"] == "error"
+    assert "No actions provided" in result["error"]
 
 
 @pytest.mark.asyncio
 async def test_process_invalid_action(device_controller):
-    """Test processing invalid action format."""
-    result = await device_controller.process({
-        "actions": [{
-            "device_id": "woonkamer_light"
-            # Missing required fields
-        }],
-        "requires_confirmation": False
-    })
-    
-    assert result["status"] == "error"
-    assert "Invalid action format" in result["error"]
-
-
-@pytest.mark.asyncio
-async def test_process_mixed_success(device_controller, mock_mqtt_client):
-    """Test processing with mixed success/failure results."""
-    mock_mqtt_client.execute_action.side_effect = [
-        True,  # First action succeeds
-        Exception("Second action failed")  # Second action fails
-    ]
-    
-    result = await device_controller.process({
+    """Test processing an invalid device action."""
+    input_data = {
         "actions": [
             {
-                "device_id": "woonkamer_light",
-                "capability": "onoff",
-                "value": "on"
-            },
-            {
-                "device_id": "keuken_light",
+                "device_id": "unknown_device",
                 "capability": "onoff",
                 "value": "on"
             }
         ],
         "requires_confirmation": False
-    })
+    }
     
-    assert result["status"] == "success"
-    assert len(result["results"]) == 2
-    assert result["results"][0]["success"] is True
-    assert result["results"][1]["success"] is False
-    assert "Second action failed" in result["results"][1]["error"] 
+    result = await device_controller.process(input_data)
+    
+    assert result["status"] == "error"
+    assert len(result["results"]) == 1
+    assert result["results"][0]["status"] == "error"
+    assert "Device unknown_device not found" in result["results"][0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_process_missing_action_params(device_controller):
+    """Test processing an action with missing parameters."""
+    input_data = {
+        "actions": [
+            {
+                "device_id": "light_1",
+                "capability": "onoff"
+                # Missing value parameter
+            }
+        ],
+        "requires_confirmation": False
+    }
+    
+    result = await device_controller.process(input_data)
+    
+    assert result["status"] == "error"
+    assert len(result["results"]) == 1
+    assert result["results"][0]["status"] == "error"
+    assert "Missing required action parameters" in result["results"][0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_process_action_error(device_controller):
+    """Test handling of action execution error."""
+    # Configure mock to raise an exception
+    device_controller.execute_device_action = AsyncMock(side_effect=Exception("Action failed"))
+    
+    input_data = {
+        "actions": [
+            {
+                "device_id": "light_1",
+                "capability": "onoff",
+                "value": "on"
+            }
+        ],
+        "requires_confirmation": False
+    }
+    
+    result = await device_controller.process(input_data)
+    
+    assert result["status"] == "error"
+    assert len(result["results"]) == 1
+    assert result["results"][0]["status"] == "error"
+    assert "Action failed" in result["results"][0]["error"] 

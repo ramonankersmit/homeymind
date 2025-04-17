@@ -5,101 +5,121 @@ This agent is responsible for parsing user input into structured intents with co
 """
 
 from typing import Dict, Any
-from .base_agent import BaseAgent, create_user_proxy
+from app.agents.base_agent import BaseAgent
 
 
 class IntentParser(BaseAgent):
-    """Agent responsible for parsing user input into structured intents."""
+    """Agent that parses user input into structured intents with confidence scores."""
 
-    async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Parse user input into a structured intent with confidence score.
+    def __init__(self, config: Dict[str, Any], mqtt_client):
+        """Initialize the intent parser.
         
         Args:
-            input_data (Dict[str, Any]): Input containing user message
-                {
-                    "message": "Zet de lampen in de woonkamer op 80%"
-                }
+            config: Configuration dictionary
+            mqtt_client: MQTT client for device communication
+        """
+        super().__init__(config, mqtt_client)
+        self.zones = ["woonkamer", "keuken", "slaapkamer", "badkamer"]
+
+    async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Parse user input into a structured intent.
+        
+        Args:
+            input_data: Dictionary containing the user message
             
         Returns:
-            Dict[str, Any]: Parsed intent with confidence score
-                {
-                    "intent": {
-                        "type": "set_brightness",
-                        "device_type": "light",
-                        "zone": "woonkamer",
-                        "value": 80
-                    },
-                    "confidence": 0.95,
-                    "raw_input": "Zet de lampen in de woonkamer op 80%"
-                }
+            Dictionary containing the parsed intent with confidence score
         """
-        user_proxy = create_user_proxy()
+        message = input_data.get("message", "").lower().strip()
         
-        self._log_message("Parsing intent...", "intent_parser")
+        if not message:
+            return {
+                "status": "error",
+                "error": "Empty message"
+            }
 
-        # Create prompt for structured output
-        prompt = f"""Parse the following user input into a structured intent.
+        # Check for light control
+        if "licht" in message and ("aan" in message or "uit" in message):
+            zone = self._extract_zone(message)
+            value = "on" if "aan" in message else "off"
+            return {
+                "status": "success",
+                "intent": {
+                    "type": "control",
+                    "device_type": "light",
+                    "zone": zone,
+                    "value": value,
+                    "confidence": 0.95
+                }
+            }
 
-Input: {input_data.get('message', '')}
+        # Check for thermostat control
+        if "temperatuur" in message and any(str(i) in message for i in range(0, 31)):
+            zone = self._extract_zone(message)
+            value = next((int(i) for i in message.split() if i.isdigit() and 0 <= int(i) <= 30), None)
+            if value is not None:
+                return {
+                    "status": "success",
+                    "intent": {
+                        "type": "control",
+                        "device_type": "thermostat",
+                        "zone": zone,
+                        "value": value,
+                        "confidence": 0.9
+                    }
+                }
 
-Respond with a JSON object in this format:
-{{
-    "intent": {{
-        "type": "intent_type",
-        "device_type": "device_type",
-        "zone": "zone_name",
-        "value": value
-    }},
-    "confidence": confidence_score,
-    "raw_input": "original_input"
-}}
+        # Check for sensor read
+        if any(q in message for q in ["wat is", "hoe warm", "hoe koud"]):
+            if "temperatuur" in message:
+                zone = self._extract_zone(message)
+                return {
+                    "status": "success",
+                    "intent": {
+                        "type": "read_sensor",
+                        "device_type": "temperature",
+                        "zone": zone,
+                        "value": None,
+                        "confidence": 0.85
+                    }
+                }
 
-The intent type should be one of:
-- set_brightness
-- set_temperature
-- turn_on
-- turn_off
-- read_sensor
-- other
+        # Check for "all lights" command
+        if "alle lichten" in message and ("aan" in message or "uit" in message):
+            value = "on" if "aan" in message else "off"
+            return {
+                "status": "success",
+                "intent": {
+                    "type": "control",
+                    "device_type": "light",
+                    "zone": "all",
+                    "value": value,
+                    "confidence": 0.8
+                }
+            }
 
-The device type should be one of:
-- light
-- thermostat
-- sensor
-- other
-
-The zone should be a specific room or area name.
-The value should be a number for numeric actions, or null for non-numeric actions.
-The confidence score should be between 0 and 1."""
-
-        chat_result = user_proxy.initiate_chat(
-            self.agent,
-            message=prompt,
-            clear_history=True
-        )
-
-        # Parse the response to extract JSON
-        try:
-            import json
-            response = chat_result.summary
-            start = response.find("{")
-            end = response.rfind("}") + 1
-            if start >= 0 and end > start:
-                result = json.loads(response[start:end])
-                self._log_message(f"Parsed intent: {result}", "intent_parser")
-                return result
-        except Exception as e:
-            self.log(f"Failed to parse intent: {e}", level="error")
-
-        # Fallback to basic response
+        # Unknown intent
         return {
+            "status": "success",
             "intent": {
-                "type": "other",
-                "device_type": "other",
+                "type": "unknown",
+                "device_type": None,
                 "zone": None,
-                "value": None
-            },
-            "confidence": 0.0,
-            "raw_input": input_data.get('message', '')
-        } 
+                "value": None,
+                "confidence": 0.1
+            }
+        }
+
+    def _extract_zone(self, message: str) -> str:
+        """Extract zone from message.
+        
+        Args:
+            message: User input message
+            
+        Returns:
+            Extracted zone or default zone
+        """
+        for zone in self.zones:
+            if zone in message:
+                return zone
+        return "woonkamer"  # Default zone 
