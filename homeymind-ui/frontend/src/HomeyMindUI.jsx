@@ -146,7 +146,7 @@ const MessageGroup = ({ messages, isLoading }) => {
 export default function HomeyMindUI() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [zones, setZones] = useState([]);
   const [lastFetched, setLastFetched] = useState(null);
   const [showDevices, setShowDevices] = useState(true);
@@ -462,14 +462,25 @@ export default function HomeyMindUI() {
             <Input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !isLoading && input.trim()) {
+                  e.preventDefault();
+                  sendMessage();
+                }
+              }}
               placeholder="Type je bericht..."
               className="flex-1 bg-gray-800/50 text-white border-gray-700 focus:border-blue-500"
+              tabIndex={1}
             />
             <Button 
               onClick={sendMessage} 
               disabled={isLoading || !input.trim()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+              className={`px-6 transition-colors ${
+                isLoading || !input.trim()
+                  ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+              }`}
+              tabIndex={2}
             >
               Verstuur
             </Button>

@@ -5,7 +5,7 @@ import json
 import asyncio
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 from typing import AsyncGenerator, List, Dict, Optional
@@ -465,3 +465,71 @@ async def startup_event():
 def cleanup():
     mqtt_client.loop_stop()
     mqtt_client.disconnect()
+
+@app.get("/chat")
+async def chat(request: Request, message: str):
+    async def event_generator():
+        try:
+            # Send initial thinking message
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": "Ik verwerk je bericht...",
+                    "role": "agent",
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+            
+            # Process the message and determine intent
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": "Ik analyseer je verzoek...",
+                    "role": "intent_parser",
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+            
+            # Add small delay to simulate processing
+            await asyncio.sleep(0.5)
+            
+            # Send final response
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": f"Je vroeg: '{message}'. Ik ga dit verzoek verwerken.",
+                    "role": "agent",
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+            
+            # Send completion event
+            yield {
+                "event": "complete",
+                "data": json.dumps({
+                    "status": "success"
+                })
+            }
+            
+        except Exception as e:
+            # Send error message
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": f"Er is een fout opgetreden: {str(e)}",
+                    "role": "agent",
+                    "isError": True,
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+            
+            # Send completion event with error
+            yield {
+                "event": "complete",
+                "data": json.dumps({
+                    "status": "error",
+                    "error": str(e)
+                })
+            }
+
+    return EventSourceResponse(event_generator())
