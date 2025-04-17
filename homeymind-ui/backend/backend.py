@@ -151,7 +151,7 @@ def load_devices_config() -> Dict:
         else:
             # Return empty config if file doesn't exist
             return {"demo_devices": [], "actual_devices": []}
-    except Exception as e:
+except Exception as e:
         logger.error(f"Error loading devices config: {e}")
         return {"demo_devices": [], "actual_devices": []}
 
@@ -323,7 +323,7 @@ async def fetch_devices():
                                     "capabilities": device_data.get("capabilities", []),
                                     "state": {}
                                 }
-                            else:
+            else:
                                 actual_devices[device_id].update({
                                     "name": device_data["name"],
                                     "type": device_data.get("class", ""),
@@ -576,8 +576,8 @@ async def chat(request: Request, message: str):
                     "status": "success"
                 })
             }
-            
-        except Exception as e:
+        
+    except Exception as e:
             # Send error message
             yield {
                 "event": "agent_message",
