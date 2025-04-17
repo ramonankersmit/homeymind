@@ -1,9 +1,9 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 
 setup(
     name="homeymind",
     version="0.1.0",
-    packages=find_packages(),
+    packages=find_namespace_packages(include=['app*', 'homey*', 'utils*', 'agents*']),
     install_requires=[
         "fastapi",
         "uvicorn",
@@ -11,6 +11,9 @@ setup(
         "autogen",
         "pyyaml",
         "sse-starlette",
+        "paho-mqtt",
+        "python-dotenv",
+        "aiohttp",
     ],
     python_requires=">=3.8",
     author="Your Name",

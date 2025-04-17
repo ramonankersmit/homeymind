@@ -470,35 +470,101 @@ def cleanup():
 async def chat(request: Request, message: str):
     async def event_generator():
         try:
-            # Send initial thinking message
+            # Initial processing message
             yield {
                 "event": "agent_message",
                 "data": json.dumps({
                     "message": "Ik verwerk je bericht...",
                     "role": "agent",
+                    "is_subagent": False,
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 })
             }
             
-            # Process the message and determine intent
+            # Intent parsing
             yield {
                 "event": "agent_message",
                 "data": json.dumps({
-                    "message": "Ik analyseer je verzoek...",
+                    "message": "Ik analyseer je verzoek om te begrijpen wat je wilt...",
                     "role": "intent_parser",
+                    "is_subagent": True,
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 })
             }
             
-            # Add small delay to simulate processing
             await asyncio.sleep(0.5)
             
-            # Send final response
+            # Device scanning
             yield {
                 "event": "agent_message",
                 "data": json.dumps({
-                    "message": f"Je vroeg: '{message}'. Ik ga dit verzoek verwerken.",
+                    "message": "Ik scan de beschikbare apparaten...",
+                    "role": "device_controller",
+                    "is_subagent": True,
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+
+            # Analyze available devices
+            device_count = len(actual_devices)
+            zone_names = [zone["name"] for zone in zones.values()]
+            
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": f"Ik zie {device_count} apparaten verspreid over zones: {', '.join(zone_names)}",
+                    "role": "device_controller",
+                    "is_subagent": True,
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+
+            # Planning action
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": "Ik plan de beste aanpak voor je verzoek...",
+                    "role": "planner",
+                    "is_subagent": True,
+                    "timestamp": datetime.now().strftime("%H:%M:%S")
+                })
+            }
+
+            await asyncio.sleep(0.5)
+
+            # Example: Process command for lights
+            if "lampen" in message.lower() or "licht" in message.lower():
+                action = "aan" if "aan" in message.lower() else "uit" if "uit" in message.lower() else None
+                location = next((zone for zone in zone_names if zone.lower() in message.lower()), None)
+                
+                if action and location:
+                    yield {
+                        "event": "agent_message",
+                        "data": json.dumps({
+                            "message": f"Ik ga de lampen {action} zetten in {location}",
+                            "role": "homey_assistant",
+                            "is_subagent": True,
+                            "timestamp": datetime.now().strftime("%H:%M:%S")
+                        })
+                    }
+                else:
+                    yield {
+                        "event": "agent_message",
+                        "data": json.dumps({
+                            "message": "Ik begrijp dat je iets met de lampen wilt, maar ik heb meer specifieke instructies nodig.",
+                            "role": "homey_assistant",
+                            "is_subagent": True,
+                            "timestamp": datetime.now().strftime("%H:%M:%S")
+                        })
+                    }
+
+            # Final response
+            yield {
+                "event": "agent_message",
+                "data": json.dumps({
+                    "message": "Ik heb je verzoek verwerkt en de nodige acties uitgevoerd.",
                     "role": "agent",
+                    "is_subagent": False,
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 })
             }
@@ -518,6 +584,7 @@ async def chat(request: Request, message: str):
                 "data": json.dumps({
                     "message": f"Er is een fout opgetreden: {str(e)}",
                     "role": "agent",
+                    "is_subagent": False,
                     "isError": True,
                     "timestamp": datetime.now().strftime("%H:%M:%S")
                 })
