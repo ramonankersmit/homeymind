@@ -4,7 +4,7 @@ from utils.intent_parser import Intent, ActionType
 import json
 import time
 
-class MQTTClient:
+class HomeyMQTTClient:
     def __init__(self, config: Dict):
         self.config = config
         self.client = None
@@ -147,11 +147,11 @@ class MQTTClient:
 # Global instance for backward compatibility
 _client_instance = None
 
-def get_client(config: Dict) -> MQTTClient:
+def get_client(config: Dict) -> HomeyMQTTClient:
     """Get or create a MQTT client instance."""
     global _client_instance
     if _client_instance is None:
-        _client_instance = MQTTClient(config)
+        _client_instance = HomeyMQTTClient(config)
     return _client_instance
 
 # Backward compatibility functions
