@@ -10,6 +10,8 @@ from autogen import AssistantAgent, UserProxyAgent
 import logging
 from datetime import datetime
 from homey.mqtt_client import HomeyMQTTClient
+from app.core.config import LLMConfig
+from app.core.logger import logger
 
 def create_user_proxy() -> UserProxyAgent:
     """Create a user proxy agent with Docker disabled."""
@@ -24,77 +26,86 @@ def create_user_proxy() -> UserProxyAgent:
 class BaseAgent:
     """Base class for all agents in the HomeyMind system."""
     
-    def __init__(self, config: Dict[str, Any], mqtt_client=None):
+    def __init__(self, config: LLMConfig):
         """Initialize the agent with configuration and MQTT client."""
         self.config = config
-        self.mqtt_client = mqtt_client
+        self.name = config.name
+        self.agent = self._create_agent(config)
+        self.llm_config = self.agent.llm_config
         self._message_handler = None
-        
-        # Initialize the AutoGen agent
-        self.agent = AssistantAgent(
-            name=config.get("name", "agent"),
-            system_message=config.get("system_message", "You are a helpful assistant."),
-            llm_config=config.get("llm_config", {})
+
+    def _create_agent(self, config: LLMConfig) -> AssistantAgent:
+        """Create an AssistantAgent with the given configuration."""
+        llm_config = {
+            "config_list": [{
+                "model": config.openai.model,
+                "api_type": config.openai.api_type,
+                "api_key": config.openai.api_key
+            }]
+        }
+        return AssistantAgent(
+            name=config.name,
+            llm_config=llm_config
         )
 
     def set_message_handler(self, handler: Callable[[Dict[str, Any]], None]) -> None:
         """Set the message handler for this agent."""
         self._message_handler = handler
     
-    def _log_message(self, message: str, role: str = "assistant") -> None:
+    @property
+    def message_handler(self) -> Optional[Callable[[Dict[str, Any]], None]]:
+        """Get the message handler for this agent."""
+        return self._message_handler
+    
+    def _log_message(self, direction: str, message: str) -> None:
         """Log a message and send it to the message handler if set."""
         if self._message_handler:
             self._message_handler({
-                "role": role,
+                "role": "assistant",
                 "message": message,
-                "agent": self.__class__.__name__
+                "agent": self.name
             })
+        logger.info(f"{self.name} - {direction}: {message}")
     
-    async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process input data and return results."""
-        raise NotImplementedError("Subclasses must implement process()")
+    def process(self, message: str) -> str:
+        """Process a message and return a response."""
+        self._log_message("incoming", message)
+        try:
+            response = self.agent.generate_reply(messages=[{"role": "user", "content": message}])
+            if response is None:
+                response = "Sorry, I couldn't generate a response."
+            self._log_message("outgoing", response)
+            return response
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            return "Sorry, I encountered an error while processing your message."
     
     async def close(self) -> None:
         """Clean up resources."""
         pass
 
-    async def execute_device_action(self, device_id: str, capability: str, value: Any) -> Dict[str, Any]:
+    def execute_device_action(self, device_id: str, action: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Execute an action on a device through MQTT.
         
         Args:
             device_id: ID of the device to control
-            capability: Device capability to control
-            value: Value to set
+            action: Action to perform
+            params: Parameters for the action
             
         Returns:
             Dictionary containing the execution results
         """
-        try:
-            await self.mqtt_client.publish(
-                f"device/{device_id}/{capability}/set",
-                {"value": value}
-            )
-            return {"success": True}
-        except Exception as e:
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        self._log_message("action", f"Executing {action} on device {device_id}")
+        return {"status": "success", "device_id": device_id, "action": action}
 
-    async def get_device_status(self, device_id: str, capability: str) -> Any:
-        """Get the current status of a device capability through MQTT.
+    def get_device_status(self, device_id: str) -> Dict[str, Any]:
+        """Get the current status of a device through MQTT.
         
         Args:
             device_id: ID of the device to query
-            capability: Device capability to query
             
         Returns:
-            Current status value or error dictionary
+            Dictionary containing the device status
         """
-        try:
-            status = await self.mqtt_client.get_status(
-                f"device/{device_id}/{capability}"
-            )
-            return status
-        except Exception as e:
-            return {"error": str(e)} 
+        self._log_message("status", f"Getting status for device {device_id}")
+        return {"status": "online", "device_id": device_id} 

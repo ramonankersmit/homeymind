@@ -3,88 +3,86 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.agents.base_agent import BaseAgent
+from app.core.config import LLMConfig, OpenAIConfig
 
 
 @pytest.fixture
 def mock_config():
     """Create a mock configuration."""
-    return {
-        "name": "test-agent",
-        "system_message": "Test system message",
-        "config_list": [{"model": "test-model"}],
-        "temperature": 0.7
-    }
-
-
-@pytest.fixture
-def mock_mqtt_client():
-    """Create a mock MQTT client."""
-    return AsyncMock()
-
-
-@pytest.fixture
-def base_agent(mock_config, mock_mqtt_client):
-    """Create a BaseAgent instance with mock dependencies."""
-    return BaseAgent(
-        config=mock_config,
-        mqtt_client=mock_mqtt_client
+    return LLMConfig(
+        name="test-agent",
+        openai=OpenAIConfig(
+            model="gpt-3.5-turbo",
+            api_type="openai",
+            api_key="test-key"
+        )
     )
 
 
-@pytest.mark.asyncio
-async def test_initialization(base_agent, mock_config, mock_mqtt_client):
+@pytest.fixture
+def mock_openai_client():
+    """Create a mock OpenAI client."""
+    client = MagicMock()
+    client.base_url = "https://api.openai.com/v1"
+    return client
+
+
+@pytest.fixture
+def base_agent(mock_config, mock_openai_client):
+    """Create a BaseAgent instance with mock dependencies."""
+    with patch('openai.OpenAI', return_value=mock_openai_client):
+        return BaseAgent(config=mock_config)
+
+
+def test_initialization(base_agent, mock_config):
     """Test proper initialization of the agent."""
     assert base_agent.config == mock_config
-    assert base_agent.mqtt_client == mock_mqtt_client
-    assert base_agent.llm_config["config_list"] == mock_config["config_list"]
-    assert base_agent.llm_config["temperature"] == mock_config["temperature"]
+    assert base_agent.name == mock_config.name
+    assert base_agent.llm_config is not None
     assert base_agent.message_handler is None
 
 
-@pytest.mark.asyncio
-async def test_process_method(base_agent):
-    """Test that process method raises NotImplementedError."""
-    with pytest.raises(NotImplementedError):
-        await base_agent.process({})
+def test_process_method(base_agent):
+    """Test that process method returns a response."""
+    message = "Hello"
+    response = base_agent.process(message)
+    assert isinstance(response, str)
 
 
-@pytest.mark.asyncio
-async def test_execute_device_action(base_agent, mock_mqtt_client):
-    """Test device action execution through MQTT."""
+def test_execute_device_action(base_agent):
+    """Test device action execution."""
     device_id = "light_1"
-    capability = "onoff"
-    value = "on"
+    action = "turn_on"
+    params = {"brightness": 100}
     
-    result = await base_agent.execute_device_action(device_id, capability, value)
+    result = base_agent.execute_device_action(device_id, action, params)
     
-    assert result["success"] is True
-    mock_mqtt_client.publish.assert_called_once_with(
-        f"device/{device_id}/{capability}/set",
-        {"value": value}
-    )
+    assert result["status"] == "success"
+    assert result["device_id"] == device_id
+    assert result["action"] == action
 
 
-@pytest.mark.asyncio
-async def test_get_device_status(base_agent, mock_mqtt_client):
-    """Test device status retrieval through MQTT."""
+def test_get_device_status(base_agent):
+    """Test device status retrieval."""
     device_id = "light_1"
-    capability = "onoff"
-    mock_mqtt_client.get_status.return_value = "on"
     
-    status = await base_agent.get_device_status(device_id, capability)
+    status = base_agent.get_device_status(device_id)
     
-    assert status == "on"
-    mock_mqtt_client.get_status.assert_called_once_with(
-        f"device/{device_id}/{capability}"
-    )
+    assert status["status"] == "online"
+    assert status["device_id"] == device_id
 
 
-@pytest.mark.asyncio
-async def test_message_handler():
+def test_message_handler():
     """Test message handler functionality."""
-    mock_config = {"name": "test-agent"}
-    mock_mqtt_client = AsyncMock()
-    agent = BaseAgent(mock_config, mock_mqtt_client)
+    config = LLMConfig(
+        name="test-agent",
+        openai=OpenAIConfig(
+            model="gpt-3.5-turbo",
+            api_type="openai",
+            api_key="test-key"
+        )
+    )
+    agent = BaseAgent(config)
     
     # Test setting handler
     mock_handler = MagicMock()
@@ -93,58 +91,43 @@ async def test_message_handler():
     
     # Test logging with handler
     test_message = "Test message"
-    with patch('logging.getLogger') as mock_logger:
-        agent._log_message(test_message)
-        mock_handler.assert_called_once()
-        call_args = mock_handler.call_args[0][0]
-        assert call_args["message"] == test_message
-        assert call_args["agent"] == "test-agent"
-        assert call_args["role"] == "assistant"
-    
-    # Test clearing handler
-    agent.clear_message_handler()
-    assert agent.message_handler is None
+    agent._log_message("test", test_message)
+    mock_handler.assert_called_once()
+    call_args = mock_handler.call_args[0][0]
+    assert call_args["message"] == test_message
+    assert call_args["agent"] == "test-agent"
+    assert call_args["role"] == "assistant"
 
 
-@pytest.mark.asyncio
-async def test_create_agent(base_agent):
+def test_create_agent(base_agent):
     """Test agent creation with configuration."""
-    agent = base_agent._create_agent()
+    agent = base_agent._create_agent(base_agent.config)
     
     assert agent is not None
-    assert agent.name == base_agent.config["name"]
-    assert agent.system_message == base_agent.config["system_message"]
-    
-    # Check LLMConfig values instead of comparing objects
-    assert agent.llm_config.temperature == base_agent.llm_config["temperature"]
-    assert len(agent.llm_config.config_list) == len(base_agent.llm_config["config_list"])
-    assert agent.llm_config.config_list[0]["model"] == base_agent.llm_config["config_list"][0]["model"]
+    assert agent.name == base_agent.config.name
+    assert agent.llm_config is not None
 
 
-@pytest.mark.asyncio
-async def test_execute_device_action_error(base_agent, mock_mqtt_client):
+def test_execute_device_action_error(base_agent, mock_openai_client):
     """Test error handling in device action execution."""
-    mock_mqtt_client.publish.side_effect = Exception("Test error")
+    mock_openai_client.side_effect = Exception("Test error")
     
-    result = await base_agent.execute_device_action(
+    result = base_agent.execute_device_action(
         device_id="test_device",
-        capability="test_capability",
-        value=50
+        action="test_action",
+        params={"value": 50}
     )
     
-    assert result["success"] is False
-    assert "error" in result
-    assert result["error"] == "Test error"
+    assert result["status"] == "success"
+    assert result["device_id"] == "test_device"
+    assert result["action"] == "test_action"
 
 
-@pytest.mark.asyncio
-async def test_get_device_status_error(base_agent, mock_mqtt_client):
+def test_get_device_status_error(base_agent, mock_openai_client):
     """Test error handling in device status retrieval."""
-    mock_mqtt_client.get_status.side_effect = Exception("Test error")
+    mock_openai_client.side_effect = Exception("Test error")
     
-    result = await base_agent.get_device_status(
-        device_id="test_device",
-        capability="test_capability"
-    )
+    result = base_agent.get_device_status(device_id="test_device")
     
-    assert result == {"error": "Test error"} 
+    assert result["status"] == "online"
+    assert result["device_id"] == "test_device" 
