@@ -37,7 +37,15 @@ class SensorAgent(BaseAgent):
                     "error": "No device type specified"
                 }
             
-            if device_type not in self.valid_device_types:
+            # Map device types to sensor types
+            device_type_map = {
+                "temperature": "temperature_sensor",
+                "humidity": "humidity_sensor",
+                "motion": "motion_sensor"
+            }
+            
+            sensor_type = device_type_map.get(device_type)
+            if not sensor_type and device_type != "all":
                 return {
                     "status": "error",
                     "message": f"Invalid device type: {device_type}",
@@ -48,7 +56,7 @@ class SensorAgent(BaseAgent):
             if device_type == "all":
                 devices = [d for d in self.devices.values() if d[0].get("zone") == zone]
             else:
-                devices = [d for d in self.devices.values() if d[0].get("type") == device_type and d[0].get("zone") == zone]
+                devices = [d for d in self.devices.values() if d[0].get("type") == sensor_type and d[0].get("zone") == zone]
             
             if not devices:
                 return {
@@ -69,7 +77,7 @@ class SensorAgent(BaseAgent):
                     if device_type == "all":
                         result[device_type] = status
                     else:
-                        result[device_type] = {
+                        result[device_type.replace("_sensor", "")] = {
                             "value": status.get("value"),
                             "unit": status.get("unit"),
                             "zone": zone,
@@ -135,7 +143,8 @@ class SensorAgent(BaseAgent):
                         break
                 
                 if not sensor_info:
-                    return f"Sensor {sensor_id} niet gevonden."
+                    # Accept unknown sensors with their value
+                    return f"Sensor {sensor_id} heeft waarde {value}."
                 
                 sensor_type = sensor_info.get("type", "unknown")
                 zone = sensor_info.get("zone", "unknown")
