@@ -57,15 +57,14 @@ class BaseAgent:
         """Get the message handler for this agent."""
         return self._message_handler
     
-    def _log_message(self, direction: str, message: str) -> None:
-        """Log a message and send it to the message handler if set."""
-        if self._message_handler:
-            self._message_handler({
-                "role": "assistant",
-                "message": message,
-                "agent": self.name
-            })
-        logger.info(f"{self.name} - {direction}: {message}")
+    def _log_message(self, msg_type: str, message: str) -> None:
+        """Log a message with the agent's name.
+        
+        Args:
+            msg_type: Type of message (info, error, etc)
+            message: Message to log
+        """
+        logger.info(f"[{self.name}] {message}")
     
     def process(self, message: str) -> str:
         """Process a message and return a response."""
@@ -89,8 +88,8 @@ class BaseAgent:
         
         Args:
             device_id: ID of the device to control
-            action: Action to perform
-            params: Parameters for the action
+            action: Action to execute
+            params: Optional parameters for the action
             
         Returns:
             Dictionary containing the execution results

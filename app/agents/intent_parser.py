@@ -4,31 +4,31 @@ Intent Parser agent for HomeyMind.
 This agent is responsible for parsing user input into structured intents with confidence scores.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from app.agents.base_agent import BaseAgent
+from app.core.config import LLMConfig
 
 
 class IntentParser(BaseAgent):
     """Agent for parsing user input into structured intents."""
 
-    def __init__(self, config: Dict[str, Any], mqtt_client=None):
+    def __init__(self, config: LLMConfig):
         """Initialize the intent parser.
         
         Args:
-            config: Configuration dictionary
-            mqtt_client: MQTT client for device communication
+            config: LLM configuration
         """
-        super().__init__(config, mqtt_client)
-        self.zones = config.get("zones", [])
+        super().__init__(config)
+        self.zones: List[str] = getattr(config.openai, "zones", [])
 
-    async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process user input and return structured intent."""
         message = input_data.get("message", "").lower()
-        self._log_message(f"Processing message: {message}")
+        self._log_message("incoming", f"Processing message: {message}")
         
         # Extract zone from message
         zone = self._extract_zone(message)
-        self._log_message(f"Extracted zone: {zone}")
+        self._log_message("processing", f"Extracted zone: {zone}")
         
         # Determine intent type and confidence
         if "light" in message or "lamp" in message:
@@ -66,7 +66,7 @@ class IntentParser(BaseAgent):
                 "confidence": 0.3
             }
             
-        self._log_message(f"Parsed intent: {intent}")
+        self._log_message("outgoing", f"Parsed intent: {intent}")
         return {"intent": intent}
 
     def _extract_zone(self, message: str) -> str:

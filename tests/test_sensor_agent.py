@@ -4,33 +4,24 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.agents.sensor_agent import SensorAgent
+from app.core.config import LLMConfig, OpenAIConfig
 
 @pytest.fixture
 def mock_config():
-    """Create a mock configuration dictionary."""
-    return {
-        "name": "sensor-agent",
-        "system_message": "You are a sensor data processing agent.",
-        "config_list": [{"model": "test-model"}],
-        "temperature": 0.7,
-        "devices": [
-            {
-                "id": "temp_sensor_1",
-                "type": "temperature",
-                "zone": "woonkamer"
-            },
-            {
-                "id": "humidity_sensor_1",
-                "type": "humidity",
-                "zone": "woonkamer"
-            },
-            {
-                "id": "motion_sensor_1",
-                "type": "motion",
-                "zone": "woonkamer"
-            }
-        ]
-    }
+    """Create a mock configuration."""
+    return LLMConfig(
+        name="test-sensor",
+        openai=OpenAIConfig(
+            model="test-model",
+            api_type="openai",
+            api_key="test-key"
+        ),
+        devices={
+            "temp_1": [{"type": "temperature", "zone": "woonkamer"}],
+            "hum_1": [{"type": "humidity", "zone": "woonkamer"}],
+            "motion_1": [{"type": "motion", "zone": "woonkamer"}]
+        }
+    )
 
 @pytest.fixture
 def mock_mqtt_client():
@@ -175,4 +166,31 @@ async def test_process_invalid_device(sensor_agent):
     })
     
     assert result["status"] == "error"
-    assert "Invalid device type" in result["message"] 
+    assert "Invalid device type" in result["message"]
+
+@pytest.mark.asyncio
+async def test_process_sensor_data(mock_config, mock_mqtt_client):
+    """Test processing sensor data."""
+    agent = SensorAgent(mock_config, mock_mqtt_client)
+    
+    # Test temperature sensor
+    response = await agent.process_sensor_data("temp_1", 22.5)
+    assert "temperatuur" in response.lower()
+    assert "22.5" in response
+    assert "woonkamer" in response.lower()
+    
+    # Test humidity sensor
+    response = await agent.process_sensor_data("hum_1", 45.0)
+    assert "luchtvochtigheid" in response.lower()
+    assert "45.0" in response
+    assert "woonkamer" in response.lower()
+    
+    # Test motion sensor
+    response = await agent.process_sensor_data("motion_1", 1)
+    assert "beweging" in response.lower()
+    assert "woonkamer" in response.lower()
+    
+    # Test unknown sensor
+    response = await agent.process_sensor_data("unknown", 42)
+    assert "unknown" in response.lower()
+    assert "42" in response 

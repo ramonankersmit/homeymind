@@ -16,95 +16,82 @@ from .homey_assistant import HomeyAssistant
 from .tts_agent import TTSAgent
 from .device_controller import DeviceController
 from homey.mqtt_client import HomeyMQTTClient
+from app.core.config import LLMConfig
 
-class AutoGenManager: 
+class AutoGenManager(BaseAgent):
     """Manager for coordinating multiple agents in the HomeyMind system."""
     
-    def __init__(self, config: Dict[str, Any], mqtt_client=None):
-        """Initialize the manager with configuration and MQTT client."""
-        self.config = config
-        self.mqtt_client = mqtt_client
+    def __init__(self, config: LLMConfig):
+        """Initialize the AutoGenManager."""
+        super().__init__(config)
+        self.mqtt_client = HomeyMQTTClient(config.mqtt_config)
+        self.mqtt_client.connect()
         
-        # Initialize all agents
-        self.agents = {
-            "parser": IntentParser(config, mqtt_client),
-            "planner": PlannerAgent(config, mqtt_client),
-            "sensor": SensorAgent(config, mqtt_client),
-            "assistant": HomeyAssistant(config, mqtt_client),
-            "tts": TTSAgent(config, mqtt_client),
-            "device": DeviceController(config, mqtt_client)
-        }
+        # Initialize agents
+        self.intent_parser = IntentParser(config)
+        self.planner = PlannerAgent(config)
+        self.sensor_agent = SensorAgent(config, self.mqtt_client)
+        self.homey_assistant = HomeyAssistant(config, self.mqtt_client)
+        self.tts_agent = TTSAgent(config, self.mqtt_client)
+        self.device_controller = DeviceController(config, self.mqtt_client)
     
-    async def process_intent_streaming(self, text: str):
-        """Process user input through the agent pipeline."""
-        # 0) Start
-        yield {"role": "manager", "message": "Ik verwerk je bericht..."}
+    async def process_intent_streaming(self, text: str) -> Dict[str, Any]:
+        """Process user intent and generate streaming response.
         
+        Args:
+            text: User input text
+            
+        Returns:
+            Dictionary containing processing results
+        """
         try:
-            # 1) Parse intent
-            yield {"role": "intent_parser", "message": "Ik analyseer je verzoek om te begrijpen wat je wilt..."}
-            intent_result = await self.agents["parser"].process({"message": text})
-            if intent_result.get("status") != "success":
-                yield {"role": "error", "message": intent_result}
-                return
+            # Parse intent
+            intent_result = await self.intent_parser.process(text)
+            if intent_result["status"] == "error":
+                return {"status": "error", "error": "Failed to process intent"}
             
-            # 2) Plan approach
-            yield {"role": "planner", "message": "Ik plan de beste aanpak voor je verzoek..."}
-            plan = await self.agents["planner"].process({"intent": intent_result["intent"]})
-            if plan.get("status") != "success":
-                yield {"role": "error", "message": plan}
-                return
+            # Get sensor data if needed
+            if intent_result["intent"]["type"] == "read_sensor":
+                sensor_result = await self.sensor_agent.process(intent_result["intent"])
+                if sensor_result["status"] == "error":
+                    return {"status": "error", "error": sensor_result["error"]}
+                intent_result["sensor_data"] = sensor_result
             
-            # 3) Get sensor data if needed
-            sensor_data = {}
-            if intent_result["intent"].get("type") == "read_sensor":
-                yield {"role": "sensor", "message": "Ik lees de sensorwaarden..."}
-                sensor_data = await self.agents["sensor"].process({"intent": intent_result["intent"]})
-                yield {"role": "sensor", "message": sensor_data}
+            # Process with assistant
+            assistant_result = await self.homey_assistant.process(intent_result)
+            if assistant_result["status"] == "error":
+                return {"status": "error", "error": assistant_result["error"]}
             
-            # 4) Generate response
-            yield {"role": "assistant", "message": "Ik verwerk je bericht..."}
-            assistant_result = await self.agents["assistant"].process({
-                "intent": intent_result["intent"],
-                "sensor_data": sensor_data,
-                "plan": plan
-            })
-            yield {"role": "assistant", "message": assistant_result}
-            if assistant_result.get("status") != "success":
-                yield {"role": "error", "message": assistant_result}
-                return
-            
-            # 5) Generate speech if needed
-            if assistant_result.get("response"):
-                yield {"role": "tts", "message": "Ik zet je bericht om naar spraak..."}
-                tts_result = await self.agents["tts"].process({
+            # Execute device actions
+            if "actions" in assistant_result and assistant_result["actions"]:
+                device_result = await self.device_controller.process(assistant_result["actions"])
+                if device_result["status"] == "error":
+                    return {"status": "error", "error": "Device not responding"}
+                
+            # Convert to speech
+            if "response" in assistant_result:
+                tts_result = await self.tts_agent.process({
                     "text": assistant_result["response"],
-                    "zone": intent_result["intent"].get("zone", "woonkamer")
+                    "zone": intent_result.get("zone", "all")
                 })
-                yield {"role": "tts", "message": tts_result}
-            
-            # 6) Execute device actions if needed
-            if assistant_result.get("actions"):
-                yield {"role": "device_controller", "message": "Ik voer de acties uit..."}
-                action_result = await self.agents["device"].process({
-                    "actions": assistant_result["actions"],
-                    "requires_confirmation": assistant_result.get("needs_confirmation", False)
-                })
-                yield {"role": "device_controller", "message": action_result}
-                if action_result.get("status") != "success":
-                    yield {"role": "error", "message": action_result}
-                    return
-            
-            # 7) Complete
-            yield {"role": "manager", "message": "Verwerking voltooid"}
+                if tts_result["status"] == "error":
+                    return {"status": "error", "error": "TTS service unavailable"}
+                
+            return {
+                "status": "success",
+                "response": assistant_result.get("response", ""),
+                "actions": assistant_result.get("actions", [])
+            }
             
         except Exception as e:
-            yield {"role": "error", "message": str(e)}
+            return {
+                "status": "error",
+                "error": str(e)
+            }
     
     async def close(self) -> None:
-        """Clean up resources."""
-        if self.mqtt_client:
-            await self.mqtt_client.disconnect()
+        """Close all resources."""
+        await self.mqtt_client.disconnect()
 
     def _log_error(self, message: str):
         """Log error message."""

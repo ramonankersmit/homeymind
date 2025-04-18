@@ -18,45 +18,27 @@ class TTSAgent(BaseAgent):
             mqtt_client: Optional MQTT client for communication
             tts_config: TTS-specific configuration dictionary
         """
-        super().__init__(config, mqtt_client)
+        super().__init__(config)
+        self.mqtt_client = mqtt_client
         
-        # Merge TTS config with general config
-        self.config = {**config, **(tts_config or {})}
-        self.speakers = self.config.get("speakers", [])
-        self.default_volume = self.config.get("default_volume", 50)
-        self.default_zone = self.config.get("default_zone", "all")
+        # Get TTS config values
+        self.speakers = getattr(config, "speakers", [])
+        self.default_volume = getattr(config, "default_volume", 50)
+        self.default_zone = getattr(config, "default_zone", "all")
         
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
-        """Process text-to-speech request.
-        
-        Args:
-            request: Dictionary containing:
-                - text: Text to convert to speech
-                - zone: Optional target zone for playback
-                - volume: Optional volume level (0-100)
-            
-        Returns:
-            Dict containing:
-                - status: "success" or "error"
-                - message: Success/error message
-        """
+        """Process text-to-speech request."""
         text = request.get("text", "")
         zone = request.get("zone", self.default_zone)
         volume = request.get("volume", self.default_volume)
         
         if not text:
-            return {
-                "status": "error",
-                "message": "No text provided for TTS conversion"
-            }
+            return {"status": "error", "message": "No text provided for TTS conversion"}
             
         # Get speakers for the specified zone
         target_speakers = self._get_speakers_for_zone(zone)
         if not target_speakers:
-            return {
-                "status": "error",
-                "message": f"No speakers available in zone: {zone}"
-            }
+            return {"status": "error", "message": f"No speakers available in zone: {zone}"}
             
         try:
             # Convert text to speech
@@ -74,21 +56,12 @@ class TTSAgent(BaseAgent):
                         }
                     )
                 except Exception as e:
-                    return {
-                        "status": "error",
-                        "message": f"Failed to play audio on speaker {speaker['id']}: {str(e)}"
-                    }
+                    return {"status": "error", "message": f"Failed to play audio on speaker {speaker['id']}: {str(e)}"}
                     
-            return {
-                "status": "success",
-                "message": f"TTS enqueued for zone {zone}"
-            }
+            return {"status": "success", "message": f"TTS enqueued for zone {zone}"}
                 
         except Exception as e:
-            return {
-                "status": "error",
-                "message": f"Error during TTS processing: {str(e)}"
-            }
+            return {"status": "error", "message": f"Error during TTS processing: {str(e)}"}
             
     async def _text_to_speech(self, text: str) -> bytes:
         """Convert text to speech audio data.

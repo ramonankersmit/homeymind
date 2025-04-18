@@ -7,22 +7,22 @@ based on structured action plans.
 
 from typing import Dict, Any, List
 from app.agents.base_agent import BaseAgent
+from app.core.config import LLMConfig, Device
 
 
 class DeviceController(BaseAgent):
     """Agent that executes device actions and coordinates device control."""
 
-    def __init__(self, config: Dict[str, Any], mqtt_client):
+    def __init__(self, config: LLMConfig):
         """Initialize the device controller.
         
         Args:
-            config: Configuration dictionary
-            mqtt_client: MQTT client for device communication
+            config: LLM configuration
         """
-        super().__init__(config, mqtt_client)
-        self.devices = config.get("devices", [])
+        super().__init__(config)
+        self.devices: List[Device] = config.openai.devices
 
-    async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Execute device actions and coordinate control.
         
         Args:
@@ -31,11 +31,10 @@ class DeviceController(BaseAgent):
                     "actions": [
                         {
                             "device_id": "light_1",
-                            "capability": "onoff",
-                            "value": "on"
+                            "action": "turn_on",
+                            "params": {"brightness": 100}
                         }
-                    ],
-                    "requires_confirmation": true
+                    ]
                 }
             
         Returns:
@@ -52,7 +51,6 @@ class DeviceController(BaseAgent):
                 }
         """
         actions = input_data.get("actions", [])
-        requires_confirmation = input_data.get("requires_confirmation", True)
 
         if not actions:
             return {
@@ -64,7 +62,7 @@ class DeviceController(BaseAgent):
         for action in actions:
             try:
                 # Execute the action
-                result = await self._execute_action(action)
+                result = self._execute_action(action)
                 results.append(result)
             except Exception as e:
                 results.append({
@@ -81,7 +79,7 @@ class DeviceController(BaseAgent):
             "results": results
         }
 
-    async def _execute_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single device action.
         
         Args:
@@ -91,15 +89,15 @@ class DeviceController(BaseAgent):
             Dictionary containing execution result
         """
         device_id = action.get("device_id")
-        capability = action.get("capability")
-        value = action.get("value")
+        action_name = action.get("action")
+        params = action.get("params", {})
 
-        if not all([device_id, capability, value]):
+        if not all([device_id, action_name]):
             raise ValueError("Missing required action parameters")
 
         # Find device in configuration
         device = next(
-            (d for d in self.devices if d.get("id") == device_id),
+            (d for d in self.devices if d.id == device_id),
             None
         )
         
@@ -107,10 +105,10 @@ class DeviceController(BaseAgent):
             raise ValueError(f"Device {device_id} not found")
 
         # Execute the action
-        await self.execute_device_action(device_id, capability, value)
+        result = self.execute_device_action(device_id, action_name, params)
         
         return {
             "device_id": device_id,
             "status": "success",
-            "message": f"Successfully executed {capability} = {value}"
+            "message": f"Successfully executed {action_name}"
         } 

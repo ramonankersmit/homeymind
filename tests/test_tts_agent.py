@@ -4,31 +4,27 @@ import pytest
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.agents.tts_agent import TTSAgent
+from app.core.config import LLMConfig, OpenAIConfig
 
 
 @pytest.fixture
 def mock_config():
-    """Create a mock configuration dictionary."""
-    return {
-        "name": "tts-agent",
-        "system_message": "You are a text-to-speech agent.",
-        "config_list": [{"model": "test-model"}],
-        "temperature": 0.7,
-        "speakers": [
-            {
-                "id": "speaker1",
-                "zone": "woonkamer"
-            },
-            {
-                "id": "speaker2",
-                "zone": "woonkamer"
-            },
-            {
-                "id": "speaker3",
-                "zone": "keuken"
-            }
-        ]
-    }
+    """Create a mock configuration."""
+    return LLMConfig(
+        name="test-tts",
+        openai=OpenAIConfig(
+            model="test-model",
+            api_type="openai",
+            api_key="test-key"
+        ),
+        speakers=[
+            {"id": "speaker1", "zone": "woonkamer"},
+            {"id": "speaker2", "zone": "woonkamer"},
+            {"id": "speaker3", "zone": "keuken"}
+        ],
+        default_volume=50,
+        default_zone="woonkamer"
+    )
 
 
 @pytest.fixture

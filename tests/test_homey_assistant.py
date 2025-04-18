@@ -3,26 +3,28 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 from app.agents.homey_assistant import HomeyAssistant
+from app.core.config import LLMConfig, OpenAIConfig
 
 
 @pytest.fixture
 def mock_config():
-    """Create mock configuration."""
-    return {
-        "name": "homey_assistant",
-        "system_message": "You are a helpful home assistant.",
-        "devices": {
+    """Create a mock configuration."""
+    return LLMConfig(
+        name="test-assistant",
+        openai=OpenAIConfig(
+            model="test-model",
+            api_type="openai",
+            api_key="test-key"
+        ),
+        devices={
             "woonkamer": [
-                {"id": "light1", "type": "light"},
-                {"id": "thermostat1", "type": "thermostat"},
-                {"id": "temp1", "type": "temperature_sensor"}
-            ],
-            "keuken": [
-                {"id": "light2", "type": "light"},
-                {"id": "humidity1", "type": "humidity_sensor"}
+                {"id": "light_1", "type": "light", "zone": "woonkamer"},
+                {"id": "light_2", "type": "light", "zone": "woonkamer"},
+                {"id": "thermostat_1", "type": "thermostat", "zone": "woonkamer"},
+                {"id": "temp_1", "type": "temperature_sensor", "zone": "woonkamer"}
             ]
         }
-    }
+    )
 
 
 @pytest.fixture
@@ -53,10 +55,13 @@ async def test_light_control_single_zone(homey_assistant):
     result = await homey_assistant.process(input_data)
     
     assert result["response"] == "Turning on lights in woonkamer"
-    assert len(result["actions"]) == 1
+    assert len(result["actions"]) == 2
     assert result["actions"][0]["device"] == "light1"
+    assert result["actions"][1]["device"] == "light2"
     assert result["actions"][0]["action"] == "set"
     assert result["actions"][0]["value"] == "on"
+    assert result["actions"][1]["action"] == "set"
+    assert result["actions"][1]["value"] == "on"
     assert result["needs_confirmation"] is True
 
 
