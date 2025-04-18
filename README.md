@@ -312,3 +312,49 @@ graph TD
     API --> SSE
     SSE --> UI
 ```
+
+## Tool-gebaseerde Agent Architectuur
+
+HomeyMind gebruikt een tool-gebaseerde agent architectuur met OpenAI function calling. Dit stelt de agent in staat om dynamisch tools te gebruiken op basis van de gebruiker's intent.
+
+### Tools
+
+De volgende tools zijn beschikbaar:
+
+- `get_sensor_data`: Lees sensorwaardes uit een zone
+- `turn_on_device`: Zet één device aan
+- `turn_off_device`: Zet één device uit
+- `dim_device`: Dim een device
+- `speak_text`: Stuur spraak naar speaker(s)
+- `get_all_sensors`: Lees alle sensors in een zone
+- `get_device_status`: Vraag status van een device
+
+Elke tool heeft een gedefinieerd input- en output-schema voor type-veilige validatie.
+
+### Planning & Uitvoering
+
+De agent gebruikt een planning-loop om de juiste tools te selecteren en uit te voeren:
+
+1. Parse gebruiker's intent
+2. Genereer function calls met OpenAI
+3. Valideer en voer tools uit
+4. Voeg resultaten toe aan context
+5. Herhaal tot alle benodigde acties zijn uitgevoerd
+
+### Voorbeeld
+
+```python
+# Process intent met function calling
+result = await manager.process_intent_streaming(
+    "Wat is de temperatuur in de woonkamer?"
+)
+
+# Resultaat bevat:
+{
+    "status": "success",
+    "plan": [
+        ("get_sensor_data", {"zone": "living_room"})
+    ],
+    "response": "De temperatuur in de woonkamer is 20 graden."
+}
+```

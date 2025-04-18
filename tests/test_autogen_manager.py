@@ -289,4 +289,66 @@ async def test_process_intent_streaming_device_error(autogen_manager, mock_agent
 async def test_close(autogen_manager, mock_mqtt_client):
     """Test proper cleanup of resources."""
     await autogen_manager.close()
-    mock_mqtt_client.disconnect.assert_called_once() 
+    mock_mqtt_client.disconnect.assert_called_once()
+
+
+@pytest.fixture
+def mock_openai_response():
+    """Create a mock OpenAI response."""
+    return {
+        "choices": [{
+            "message": {
+                "function_call": {
+                    "name": "get_sensor_data",
+                    "arguments": '{"zone": "living_room"}'
+                }
+            }
+        }]
+    }
+
+
+@pytest.mark.asyncio
+async def test_process_intent_with_function_call(mock_config, mock_mqtt_client, mock_openai_response):
+    """Test processing intent with function calling."""
+    # Create manager
+    manager = AutoGenManager(mock_config)
+    manager.mqtt_client = mock_mqtt_client
+    
+    # Mock OpenAI call
+    manager._call_openai = AsyncMock(return_value=mock_openai_response)
+    
+    # Mock tool execution
+    manager.tools = {
+        "get_sensor_data": MagicMock(
+            validate_input=lambda x: x,
+            validate_output=lambda x: x,
+            func=AsyncMock(return_value={"status": "success", "temperature": 20.0})
+        )
+    }
+    
+    # Process intent
+    result = await manager.process_intent_streaming("What's the temperature in the living room?")
+    
+    # Verify results
+    assert result["status"] == "success"
+    assert len(result["plan"]) == 1
+    assert result["plan"][0][0] == "get_sensor_data"
+    assert result["plan"][0][1]["zone"] == "living_room"
+
+
+@pytest.mark.asyncio
+async def test_process_intent_with_error(mock_config, mock_mqtt_client):
+    """Test processing intent with error handling."""
+    # Create manager
+    manager = AutoGenManager(mock_config)
+    manager.mqtt_client = mock_mqtt_client
+    
+    # Mock OpenAI call to raise error
+    manager._call_openai = AsyncMock(side_effect=Exception("Test error"))
+    
+    # Process intent
+    result = await manager.process_intent_streaming("Test query")
+    
+    # Verify error handling
+    assert result["status"] == "error"
+    assert "Test error" in result["error"] 

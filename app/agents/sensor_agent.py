@@ -7,6 +7,8 @@ This agent is responsible for reading sensor data from Homey devices.
 import asyncio
 from typing import Dict, Any
 from .base_agent import BaseAgent
+from .tool_registry import register_tool, Tool
+from .schemas import SensorDataInput, SensorDataOutput, AllSensorsInput, AllSensorsOutput
 
 class SensorAgent(BaseAgent):
     """Agent that handles sensor data retrieval and processing."""
@@ -22,6 +24,23 @@ class SensorAgent(BaseAgent):
         self.mqtt_client = mqtt_client
         self.devices = getattr(config, "devices", {})
         self.valid_device_types = {"temperature", "humidity", "motion", "all"}
+        
+        # Register tools
+        register_tool(Tool(
+            name="get_sensor_data",
+            func=self.process,
+            input_model=SensorDataInput,
+            output_model=SensorDataOutput,
+            description="Read sensor values for a given zone"
+        ))
+        
+        register_tool(Tool(
+            name="get_all_sensors",
+            func=self.process_sensor_data,
+            input_model=AllSensorsInput,
+            output_model=AllSensorsOutput,
+            description="Read all sensors in a given zone"
+        ))
 
     async def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Process sensor data request."""

@@ -6,6 +6,8 @@ This agent handles text-to-speech conversion and audio playback across multiple 
 
 from typing import Dict, Any, List
 from .base_agent import BaseAgent
+from .tool_registry import register_tool, Tool
+from .schemas import TTSInput, TTSOutput
 
 class TTSAgent(BaseAgent):
     """Agent responsible for text-to-speech conversion and audio playback."""
@@ -25,6 +27,15 @@ class TTSAgent(BaseAgent):
         self.speakers = getattr(config, "speakers", [])
         self.default_volume = getattr(config, "default_volume", 50)
         self.default_zone = getattr(config, "default_zone", "all")
+        
+        # Register tools
+        register_tool(Tool(
+            name="speak_text",
+            func=self.process,
+            input_model=TTSInput,
+            output_model=TTSOutput,
+            description="Convert text to speech and play it on speakers"
+        ))
         
     async def process(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Process text-to-speech request."""

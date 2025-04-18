@@ -8,6 +8,11 @@ based on structured action plans.
 from typing import Dict, Any, List
 from app.agents.base_agent import BaseAgent
 from app.core.config import LLMConfig, Device
+from .tool_registry import register_tool, Tool
+from .schemas import (
+    DeviceActionInput, DeviceActionOutput,
+    DimDeviceInput, DeviceStatusInput, DeviceStatusOutput
+)
 
 
 class DeviceController(BaseAgent):
@@ -21,6 +26,39 @@ class DeviceController(BaseAgent):
         """
         super().__init__(config)
         self.devices: List[Device] = config.openai.devices
+        
+        # Register tools
+        register_tool(Tool(
+            name="turn_on_device",
+            func=self._execute_action,
+            input_model=DeviceActionInput,
+            output_model=DeviceActionOutput,
+            description="Turn on a device"
+        ))
+        
+        register_tool(Tool(
+            name="turn_off_device",
+            func=self._execute_action,
+            input_model=DeviceActionInput,
+            output_model=DeviceActionOutput,
+            description="Turn off a device"
+        ))
+        
+        register_tool(Tool(
+            name="dim_device",
+            func=self._execute_action,
+            input_model=DimDeviceInput,
+            output_model=DeviceActionOutput,
+            description="Dim a device to a specific brightness"
+        ))
+        
+        register_tool(Tool(
+            name="get_device_status",
+            func=self.get_device_status,
+            input_model=DeviceStatusInput,
+            output_model=DeviceStatusOutput,
+            description="Get the current status of a device"
+        ))
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Execute device actions and coordinate control.

@@ -6,6 +6,7 @@ handling the flow of structured data between agents and coordinating their actio
 """
 
 import asyncio
+import json
 from typing import AsyncGenerator, Dict, Any, List
 from autogen import AssistantAgent, UserProxyAgent
 from .base_agent import BaseAgent
@@ -15,8 +16,13 @@ from .sensor_agent import SensorAgent
 from .homey_assistant import HomeyAssistant
 from .tts_agent import TTSAgent
 from .device_controller import DeviceController
+from .tool_registry import get_all_tools
 from homey.mqtt_client import HomeyMQTTClient
 from app.core.config import LLMConfig
+from app.core.observability import (
+    get_logger, ToolMetrics, SessionMetrics,
+    log_tool_call, log_tool_result, log_error
+)
 
 class AutoGenManager(BaseAgent):
     """Manager for coordinating multiple agents in the HomeyMind system."""
@@ -34,61 +40,94 @@ class AutoGenManager(BaseAgent):
         self.homey_assistant = HomeyAssistant(config, self.mqtt_client)
         self.tts_agent = TTSAgent(config, self.mqtt_client)
         self.device_controller = DeviceController(config, self.mqtt_client)
-    
-    async def process_intent_streaming(self, text: str) -> Dict[str, Any]:
-        """Process user intent and generate streaming response.
         
-        Args:
-            text: User input text
-            
-        Returns:
-            Dictionary containing processing results
-        """
-        try:
-            # Parse intent
-            intent_result = await self.intent_parser.process(text)
-            if intent_result["status"] == "error":
-                return {"status": "error", "error": "Failed to process intent"}
-            
-            # Get sensor data if needed
-            if intent_result["intent"]["type"] == "read_sensor":
-                sensor_result = await self.sensor_agent.process(intent_result["intent"])
-                if sensor_result["status"] == "error":
-                    return {"status": "error", "error": sensor_result["error"]}
-                intent_result["sensor_data"] = sensor_result
-            
-            # Process with assistant
-            assistant_result = await self.homey_assistant.process(intent_result)
-            if assistant_result["status"] == "error":
-                return {"status": "error", "error": assistant_result["error"]}
-            
-            # Execute device actions
-            if "actions" in assistant_result and assistant_result["actions"]:
-                device_result = await self.device_controller.process(assistant_result["actions"])
-                if device_result["status"] == "error":
-                    return {"status": "error", "error": "Device not responding"}
-                
-            # Convert to speech
-            if "response" in assistant_result:
-                tts_result = await self.tts_agent.process({
-                    "text": assistant_result["response"],
-                    "zone": intent_result.get("zone", "all")
-                })
-                if tts_result["status"] == "error":
-                    return {"status": "error", "error": "TTS service unavailable"}
-                
-            return {
-                "status": "success",
-                "response": assistant_result.get("response", ""),
-                "actions": assistant_result.get("actions", [])
+        # Get all registered tools
+        self.tools = get_all_tools()
+        
+        # Generate function definitions for OpenAI
+        self.functions = [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.input_model.schema()
             }
+            for tool in self.tools.values()
+        ]
+        
+        # Initialize logger
+        self.logger = get_logger("autogen_manager")
+    
+    async def process_intent_streaming(self, text: str, session_id: str = None) -> Dict[str, Any]:
+        """Process user intent and generate streaming response."""
+        try:
+            with SessionMetrics(session_id or "default"):
+                # Parse intent
+                intent_result = await self.intent_parser.process(text)
+                if intent_result["status"] == "error":
+                    return {"status": "error", "error": "Failed to process intent"}
+                
+                # Initialize context
+                context = [{"role": "user", "content": text}]
+                plan = []
+                
+                while True:
+                    # Get response from OpenAI with function calling
+                    response = await self._call_openai(context)
+                    msg = response.choices[0].message
+                    
+                    if msg.get("function_call"):
+                        # Execute function call
+                        name = msg.function_call.name
+                        args = json.loads(msg.function_call.arguments)
+                        
+                        # Get and validate tool
+                        tool = self.tools[name]
+                        validated_args = tool.validate_input(args)
+                        
+                        # Log tool call
+                        log_tool_call(self.logger, name, validated_args.dict())
+                        
+                        try:
+                            with ToolMetrics(name):
+                                # Execute tool
+                                output = await tool.func(validated_args.dict())
+                                validated_output = tool.validate_output(output)
+                                
+                                # Log tool result
+                                log_tool_result(self.logger, name, validated_output.dict())
+                                
+                                # Add to context
+                                context.append({
+                                    "role": "function",
+                                    "name": name,
+                                    "content": json.dumps(validated_output.dict())
+                                })
+                                
+                                # Add to plan
+                                plan.append((name, args))
+                        except Exception as e:
+                            log_error(self.logger, e, {"tool": name, "args": args})
+                            raise
+                    else:
+                        # Final response
+                        return {
+                            "status": "success",
+                            "plan": plan,
+                            "response": msg.content
+                        }
             
         except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e)
-            }
+            log_error(self.logger, e, {"text": text, "session_id": session_id})
+            return {"status": "error", "error": str(e)}
     
+    async def _call_openai(self, context: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Call OpenAI API with function calling enabled."""
+        return await self.agent.generate_reply(
+            messages=context,
+            functions=self.functions,
+            function_call="auto"
+        )
+
     async def close(self) -> None:
         """Close all resources."""
         await self.mqtt_client.disconnect()
