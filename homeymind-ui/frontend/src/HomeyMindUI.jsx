@@ -20,12 +20,18 @@ const AGENT_ICONS = {
 };
 
 const MessageGroup = ({ messages, isLoading }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
   const mainMessage = messages[messages.length - 1];
   const isAgentResponse = mainMessage.sender === 'agent';
   const agentMessages = messages.filter(m => m.is_subagent || (m.role !== 'agent' && m.role !== 'assistant' && m.role !== 'user'));
   const finalResponse = messages.find(m => (m.role === 'agent' || m.role === 'assistant') && !m.is_subagent);
   
+  useEffect(() => {
+    if (finalResponse && !isLoading) {
+      setIsExpanded(false);
+    }
+  }, [finalResponse, isLoading]);
+
   if (!mainMessage) return null;
 
   // User message
