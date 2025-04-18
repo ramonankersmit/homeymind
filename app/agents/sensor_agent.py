@@ -31,10 +31,18 @@ class SensorAgent(BaseAgent):
             zone = intent.get("zone")
             
             if not device_type:
-                return {"status": "error", "error": "No device type specified"}
+                return {
+                    "status": "error",
+                    "message": "No device type specified",
+                    "error": "No device type specified"
+                }
             
             if device_type not in self.valid_device_types:
-                return {"status": "error", "error": f"Invalid device type: {device_type}"}
+                return {
+                    "status": "error",
+                    "message": f"Invalid device type: {device_type}",
+                    "error": f"Invalid device type: {device_type}"
+                }
             
             # Get matching devices
             if device_type == "all":
@@ -43,7 +51,11 @@ class SensorAgent(BaseAgent):
                 devices = [d for d in self.devices.values() if d[0].get("type") == device_type and d[0].get("zone") == zone]
             
             if not devices:
-                return {"status": "error", "error": f"No {device_type} devices found in zone {zone}"}
+                return {
+                    "status": "error",
+                    "message": f"No {device_type} devices found in zone {zone}",
+                    "error": f"No {device_type} devices found in zone {zone}"
+                }
             
             result = {"status": "success"}
             
@@ -64,51 +76,85 @@ class SensorAgent(BaseAgent):
                             "timestamp": status.get("timestamp")
                         }
                 except Exception as e:
-                    return {"status": "error", "error": str(e)}
+                    return {
+                        "status": "error",
+                        "message": str(e),
+                        "error": str(e)
+                    }
             
             return result
             
         except Exception as e:
-            return {"status": "error", "error": str(e)}
-
-    async def process_sensor_data(self, zone: str) -> Dict[str, Any]:
-        """Process sensor data and generate a response."""
-        try:
-            # Get all sensors in the zone
-            zone_devices = self.devices.get(zone, [])
-            sensors = [d for d in zone_devices if d.get("type") in ["temperature_sensor", "humidity_sensor", "motion_sensor"]]
-            
-            if not sensors:
-                return {
-                    "status": "error",
-                    "message": f"Geen sensors gevonden in {zone}",
-                    "response": f"Geen sensors gevonden in {zone}"
-                }
-            
-            response = f"Current sensor readings for {zone}:"
-            for sensor in sensors:
-                sensor_id = sensor.get("id")
-                sensor_type = sensor.get("type")
-                if sensor_id:
-                    try:
-                        status = await self.mqtt_client.get_device_status(sensor_id)
-                        if status:
-                            response += f"\n{sensor_type}: {status.get('value', 'unknown')}"
-                    except Exception as e:
-                        self._log_message("error", f"Error getting status for sensor {sensor_id}: {str(e)}")
-            
-            return {
-                "status": "success",
-                "message": "Sensor data retrieved successfully",
-                "response": response
-            }
-        except Exception as e:
-            self._log_message("error", f"Error processing sensor data: {str(e)}")
             return {
                 "status": "error",
                 "message": str(e),
-                "response": f"Er is een fout opgetreden bij het verwerken van de sensor data: {str(e)}"
+                "error": str(e)
             }
+
+    async def process_sensor_data(self, sensor_id: str, value: float = None) -> Dict[str, Any]:
+        """Process sensor data and generate a response."""
+        try:
+            if value is None:
+                # Get all sensors in the zone
+                zone_devices = self.devices.get(sensor_id, [])
+                sensors = [d for d in zone_devices if d.get("type") in ["temperature_sensor", "humidity_sensor", "motion_sensor"]]
+                
+                if not sensors:
+                    return {
+                        "status": "error",
+                        "message": f"Geen sensors gevonden in {sensor_id}",
+                        "response": f"Geen sensors gevonden in {sensor_id}"
+                    }
+                
+                response = f"Current sensor readings for {sensor_id}:"
+                for sensor in sensors:
+                    sensor_id = sensor.get("id")
+                    sensor_type = sensor.get("type")
+                    if sensor_id:
+                        try:
+                            status = await self.mqtt_client.get_device_status(sensor_id)
+                            if status:
+                                response += f"\n{sensor_type}: {status.get('value', 'unknown')}"
+                        except Exception as e:
+                            self._log_message("error", f"Error getting status for sensor {sensor_id}: {str(e)}")
+                
+                return {
+                    "status": "success",
+                    "message": "Sensor data retrieved successfully",
+                    "response": response
+                }
+            else:
+                # Get sensor info from devices dictionary
+                sensor_info = None
+                for devices in self.devices.values():
+                    for device in devices:
+                        if device.get("id") == sensor_id:
+                            sensor_info = device
+                            break
+                    if sensor_info:
+                        break
+                
+                if not sensor_info:
+                    return f"Sensor {sensor_id} niet gevonden."
+                
+                sensor_type = sensor_info.get("type", "unknown")
+                zone = sensor_info.get("zone", "unknown")
+                
+                # Generate response based on sensor type
+                if "temperature" in sensor_type.lower():
+                    response = f"De temperatuur in de {zone} is {value} graden Celsius."
+                elif "humidity" in sensor_type.lower():
+                    response = f"De luchtvochtigheid in de {zone} is {value}%."
+                elif "motion" in sensor_type.lower():
+                    response = f"Er is beweging gedetecteerd in de {zone}."
+                else:
+                    response = f"Sensor {sensor_id} heeft waarde {value}."
+                
+                self._log_message("info", f"Processed sensor data: {response}")
+                return response
+        except Exception as e:
+            self._log_message("error", f"Error processing sensor data: {str(e)}")
+            return f"Er is een fout opgetreden bij het verwerken van de sensor data: {str(e)}"
 
     def _get_timestamp(self) -> str:
         """Get current timestamp in ISO format.

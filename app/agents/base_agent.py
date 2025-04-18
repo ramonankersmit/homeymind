@@ -65,6 +65,13 @@ class BaseAgent:
             message: Message to log
         """
         logger.info(f"[{self.name}] {message}")
+        if self._message_handler:
+            self._message_handler({
+                "type": msg_type,
+                "message": message,
+                "agent": self.name,
+                "role": "assistant"
+            })
     
     def process(self, message: str) -> str:
         """Process a message and return a response."""

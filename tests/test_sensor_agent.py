@@ -17,9 +17,9 @@ def mock_config():
             api_key="test-key"
         ),
         devices={
-            "temp_1": [{"type": "temperature", "zone": "woonkamer"}],
-            "hum_1": [{"type": "humidity", "zone": "woonkamer"}],
-            "motion_1": [{"type": "motion", "zone": "woonkamer"}]
+            "temp_1": [{"id": "temp_1", "type": "temperature_sensor", "zone": "woonkamer"}],
+            "hum_1": [{"id": "hum_1", "type": "humidity_sensor", "zone": "woonkamer"}],
+            "motion_1": [{"id": "motion_1", "type": "motion_sensor", "zone": "woonkamer"}]
         }
     )
 

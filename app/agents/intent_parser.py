@@ -78,9 +78,12 @@ class IntentParser(BaseAgent):
         Returns:
             Extracted zone or default zone
         """
-        for zone in self.zones:
-            if zone.lower() in message:
-                return zone
+        # Extract zone from "in the X" or "in X" patterns
+        import re
+        match = re.search(r'in (?:the )?(\w+)', message)
+        if match:
+            zone = match.group(1).lower()
+            return zone
         return "woonkamer"  # Default zone
 
     def _extract_temperature(self, message: str) -> Optional[float]:
