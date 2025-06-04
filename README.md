@@ -244,6 +244,8 @@ homeymind/
 
 ## Architectuur
 
+Een standalone versie van dit diagram vind je in [docs/architecture.mmd](docs/architecture.mmd).
+
 ```mermaid
 graph TD
     subgraph Frontend["Frontend Interface"]
