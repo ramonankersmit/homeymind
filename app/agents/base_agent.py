@@ -9,7 +9,6 @@ import autogen
 from autogen import AssistantAgent, UserProxyAgent
 import logging
 from datetime import datetime
-from homey.mqtt_client import HomeyMQTTClient
 from app.core.config import LLMConfig
 from app.core.logger import logger
 
